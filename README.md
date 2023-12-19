@@ -1,12 +1,16 @@
-## TrapBot
+# TrapBot
 
-# Installation
+## Installation
 
 `python setup.py install --user`
 
-create file in musicBot folder called `.env`
+Create a file in musicBot folder called `.env`
 Paste this into it but replace `<DISCORD_TOKEN>` with your token
 ```
 # .env
 DISCORD_TOKEN=<DISCORD_TOKEN>
 ```
+
+## Running
+
+In the musicBot folder run `python3 musicBot.py`
