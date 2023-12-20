@@ -285,6 +285,24 @@ async def balance(ctx):
         await ctx.send("You are a new player. Your balance is 100 to start.")
     else:
         await ctx.send(f"Your current balance is {user_balances[user_id]}.")
+        
+@bot.command(name='i_have_a_problem', help='You have an issue if you use this')
+async def problem(ctx):
+    global user_balances
+    user_id = str(ctx.author.id)
+    if user_id not in user_balances:
+        await ctx.send("You are a new player. Your balance is 100 to start.")
+    else:
+        msg = 'I have a problem, I need to stop gambling, I need to call 1-800-662-4357'
+        await ctx.send("type: " + msg)
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        guess_msg = await bot.wait_for('message', check=check, timeout=30.0)
+        if guess_msg.content == msg:
+            update_balance(user_id, 10)
+            await ctx.send(f"Your current balance is {user_balances[user_id]}.")
+        else:
+            await ctx.send("you are a degenerate, get some help")
 
 if __name__ == "__main__" :
     load_balances()
