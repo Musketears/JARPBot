@@ -116,8 +116,11 @@ async def play_url(ctx,url):
     try :
         print(url)
         voice_client = ctx.message.guild.voice_client
-        if not voice_client.is_connected():
-            await join(ctx)
+        if voice_client == None:
+            voice_client = ctx.message.author.voice.channel
+            await voice_client.connect()
+            await play_url(ctx, url)
+            return
         if is_processing or voice_client.is_playing():
             filename = await YTDLSource.from_url(url, loop=bot.loop)
             queue.append(filename)
