@@ -200,7 +200,7 @@ async def alex_roulette(ctx):
     user_id = str(ctx.author.id)
     
     if user_balances[user_id] < 10:
-        await ctx.send("You're poor as fuck. No roulette for you")
+        await ctx.send("You're poor. No roulette for you")
     
     else:
         update_balance(user_id, -10)
@@ -240,14 +240,14 @@ async def gamble(ctx, bet: int = None):
         update_balance(user_id, 0)
 
     if bet is None or bet <= 0:
-        await ctx.send("Use your fucking brain and enter a bet idiot")
+        await ctx.send("Use your brain and enter a bet too.")
         return
 
     if bet > user_balances[user_id]:
-        await ctx.send("You're too poor to bet. Get lost loser")
+        await ctx.send("You're too poor to bet.")
         return
     elif bet <= 0:
-        await ctx.send("Enter your bet pussy")
+        await ctx.send("Enter your bet.")
         return
 
     current_number = random.randint(1, 10)
@@ -259,7 +259,7 @@ async def gamble(ctx, bet: int = None):
     try:
         guess_msg = await bot.wait_for('message', check=check, timeout=30.0)
     except asyncio.TimeoutError:
-        await ctx.send('You took too long, loser. Get fucked and fuck off')
+        await ctx.send('You took too long.')
         return
 
     next_number = random.randint(1,10)
@@ -268,20 +268,20 @@ async def gamble(ctx, bet: int = None):
     win = (player_guess == 'higher' and next_number > current_number) or (player_guess == 'lower' and next_number < current_number)
 
     if win:
-        await ctx.send(f"Congrats, you were correct! This means you're not a loser, as the next number was {next_number}.")
+        await ctx.send(f"Congrats, you were correct! The next number was {next_number}.")
         update_balance(user_id, bet)
     else:
-        await ctx.send(f"Damn, what a loser. You lost. The number was {next_number}. Get fucked and fuck off. Be poor.")
+        await ctx.send(f"You lost. The number was {next_number}.")
         update_balance(user_id, bet * -1)
 
     await ctx.send(f"Your new balance is: {user_balances[user_id]}")
 
-@bot.command(name='balance', help='Check your balance you fucking addict')
+@bot.command(name='balance', help='Check your balance')
 async def balance(ctx):
     global user_balances
     user_id = str(ctx.author.id)
     if user_id not in user_balances:
-        await ctx.send("You are a new player. Welcome to hell. Your balance is 100 to start.")
+        await ctx.send("You are a new player. Your balance is 100 to start.")
     else:
         await ctx.send(f"Your current balance is {user_balances[user_id]}.")
 
