@@ -1,5 +1,6 @@
 # musicbot specific files
 user_balances.json
+*.webm
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
