@@ -14,3 +14,5 @@ DISCORD_TOKEN=<DISCORD_TOKEN>
 ## Running
 
 In the musicBot folder run `python3 musicBot.py`
+
+By Jackson Jost, Alex Mah, Ryan Stack, Priscilla Kang
