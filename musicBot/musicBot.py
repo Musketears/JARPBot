@@ -68,23 +68,22 @@ class YTDLSource(discord.PCMVolumeTransformer):
         return filename
 
 
-def save_balances(balances):
-    if os.path.exists(balances_file):
-        with open(balances_file, 'r') as file:
-                existing_balances = json.load(file)
+def update_balance(id, amount):
+    global user_balances
+    if id in user_balances:
+        user_balances[id] += amount
     else:
-        existing_balances = {}
-
-    existing_balances.update(balances)
-
+        user_balances[id] = 100 + amount
     with open(balances_file, 'w') as file:
-        json.dump(existing_balances, file)
+        json.dump(user_balances, file)
 
 def load_balances():
-    if not os.path.exists(balances_file):
-        return{}
-    with open(balances_file, 'r') as file:
-        return json.load(file)
+    global user_balances
+    try:
+        file = open(balances_file, 'r')
+        user_balances = json.load(file)
+    except FileNotFoundError:
+        user_balances = {}
 
 @bot.command(name='join', help='Tells the bot to join the voice channel')
 async def join(ctx):
@@ -114,7 +113,6 @@ async def leave(ctx):
 async def play_url(ctx,url):
     global is_processing
     try :
-        print(url)
         voice_client = ctx.message.guild.voice_client
         if voice_client == None:
             voice_client = ctx.message.author.voice.channel
@@ -199,14 +197,14 @@ def remove_files(files):
 
 @bot.command(name='alex_roulette', help='ggs')
 async def alex_roulette(ctx):
-    my_balance = user_balances[ctx.author.id]
+    user_id = str(ctx.author.id)
     
-    if my_balance < 10:
+    if user_balances[user_id] < 10:
         await ctx.send("You're poor as fuck. No roulette for you")
     
     else:
-        user_balances[ctx.author.id] = user_balances[ctx.author.id] - 10
-        await ctx.send(f"Your new balance is: {user_balances[ctx.author.id]}")
+        update_balance(user_id, -10)
+        await ctx.send(f"Your new balance is: {user_balances[user_id]}")
         roulette_num = random.randint(1,100)
         if roulette_num >= 90:
             try:
@@ -234,13 +232,12 @@ async def alex_roulette(ctx):
                 await ctx.send("Thanks for the $10 xD, try again?")
             except:
                 await ctx.send("The bot is not connected to a voice channel.")
-    save_balances(user_balances)
 
 @bot.command(name='gamble', help='Gamble your life savings')
 async def gamble(ctx, bet: int = None):
-    user_id = ctx.author.id
+    user_id = str(ctx.author.id)
     if user_id not in user_balances:
-        user_balances[user_id] = 100
+        update_balance(user_id, 0)
 
     if bet is None or bet <= 0:
         await ctx.send("Use your fucking brain and enter a bet idiot")
@@ -272,26 +269,22 @@ async def gamble(ctx, bet: int = None):
 
     if win:
         await ctx.send(f"Congrats, you were correct! This means you're not a loser, as the next number was {next_number}.")
-        user_balances[user_id] += bet
+        update_balance(user_id, bet)
     else:
         await ctx.send(f"Damn, what a loser. You lost. The number was {next_number}. Get fucked and fuck off. Be poor.")
-        user_balances[user_id] -= bet
+        update_balance(user_id, bet * -1)
 
     await ctx.send(f"Your new balance is: {user_balances[user_id]}")
 
-    save_balances(user_balances)
-
-
 @bot.command(name='balance', help='Check your balance you fucking addict')
 async def balance(ctx):
-    user_id = ctx.author.id
+    global user_balances
+    user_id = str(ctx.author.id)
     if user_id not in user_balances:
-        user_balances[user_id] = 100
-        save_balances(user_balances)
         await ctx.send("You are a new player. Welcome to hell. Your balance is 100 to start.")
     else:
         await ctx.send(f"Your current balance is {user_balances[user_id]}.")
 
 if __name__ == "__main__" :
+    load_balances()
     bot.run(TOKEN)
-    user_balances = load_balances()
