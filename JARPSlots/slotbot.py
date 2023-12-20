@@ -91,6 +91,7 @@ async def slots(ctx):
         update_balance(user_id, win_amount)
     else:
         await ctx.send("Sorry, you didn't win anything. Better luck next time.")
+        update_balance(user_id, win_amount)
 
     await ctx.send(f"Your new balance is: {user_balances[user_id]}.")
 
