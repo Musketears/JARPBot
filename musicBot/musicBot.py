@@ -262,7 +262,8 @@ async def gamble(ctx, bet: int = None):
         await ctx.send('You took too long.')
         return
 
-    next_number = random.randint(1,10)
+    possible_numbers = [num for num in range(1, 11) if num != current_number]
+    next_number = random.choice(possible_numbers)
     player_guess = guess_msg.content.lower()
 
     win = (player_guess == 'higher' and next_number > current_number) or (player_guess == 'lower' and next_number < current_number)
