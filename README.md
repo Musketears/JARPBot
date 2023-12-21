@@ -1,4 +1,4 @@
-# TrapBot
+# JARPBot
 
 ## Installation
 
