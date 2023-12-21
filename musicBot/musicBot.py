@@ -242,7 +242,7 @@ async def gamble(ctx, bet: str = None):
 
     if bet is None:
         await ctx.send("Use your brain and enter a bet too.")
-    return
+        return
     
     if bet == "all":
         bet = user_balances[user_id]
