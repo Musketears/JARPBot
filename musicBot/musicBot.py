@@ -384,7 +384,7 @@ async def test_embed(ctx):
 @bot.command(name='get_log', help="print log file out for errors enter a number after to print that many lines (default 20)")
 async def get_log(ctx, n = 20):
     with open('musicBot.log', 'r') as f:
-        output = f.readlines()[::n * -1]
+        output = f.readlines()[n * -1::]
         await ctx.send("\n".join(output))
 
 @bot.command(name='8ball', help='Ask a yes/no question and get a response with the best course of action.')
