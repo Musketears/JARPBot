@@ -385,7 +385,7 @@ async def test_embed(ctx):
 async def get_log(ctx, n = 20):
     with open('musicBot.log', 'r') as f:
         output = f.readlines()[::n * -1]
-        await ctx.send(output)
+        await ctx.send(output.join("\n"))
 
 if __name__ == "__main__" :
     load_balances()
