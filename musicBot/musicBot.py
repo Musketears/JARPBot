@@ -25,7 +25,9 @@ is_stop = False
 is_processing = False
 current_file = ''
 balances_file = 'user_balances.json'
+gachas_file = 'user_gachas.json'
 user_balances = {}
+user_gachas = {}
 
 youtube_dl.utils.bug_reports_message = lambda: ''
 
@@ -85,6 +87,20 @@ def load_balances():
         user_balances = json.load(file)
     except FileNotFoundError:
         user_balances = {}
+
+def update_gachas(id, person):
+    global user_gachas
+    user_gachas[id].append(person)
+    with open(gachas_file, 'w') as file:
+        json.dump(user_gachas, file)
+
+def load_gachas():
+    global user_gachas
+    try:
+        file = open(gachas_file, 'r')
+        user_gachas = json.load(file)
+    except FileNotFoundError:
+        user_gachas = {}
 
 @bot.command(name='join', help='Tells the bot to join the voice channel')
 async def join(ctx):
@@ -486,6 +502,55 @@ class RockPaperScissors(discord.ui.Select):
             embed=result_embed, content=None, view=None
         )
 
+@bot.command(name='pull', help='Pulls 1 person. Cost = 10')
+async def pull(ctx):
+    global person_pool
+    global adjectives_pool
+    user_id = str(ctx.author.id)
+    if user_id not in user_balances:
+        update_balance(user_id, 0)
+
+    bet = 10
+
+    if bet > user_balances[user_id]:
+        await ctx.send("You're too poor to play.")
+        return
+
+    update_balance(user_id, -bet)
+    
+   #detemines rarity
+    new_person = ""
+    result = random.randint(1,100)
+    if result == 1:
+        new_person = '5 ★ '
+
+    if result >= 2 and result <= 15:
+        new_person = '4 ★ '
+
+    if result >= 15 and result <= 50:
+        new_person = '3 ★ '
+    else:
+        new_person = '2 ★ '
+    
+    #pick random adjective
+    new_person = new_person + random.choice(adjectives_pool) + " "
+    #pick random person
+    new_person = new_person + random.choice(person_pool)
+    
+    update_gachas(user_id, new_person)
+    await ctx.send(f"Congratulations! You got a {new_person}!\nYour new balance is: {user_balances[user_id]}.")
+
+@bot.command(name='gacha_inv', help='Check your gacha inventory')
+async def gacha_inv(ctx):
+    global user_gachas
+    output_str = ""
+    user_id = str(ctx.author.id)
+    if user_id not in user_gachas:
+        await ctx.send("You are a new player. You have nothing.")
+    else:
+        for person in user_gachas[user_id]:
+            output_str = output_str + person + "\n"
+        await ctx.send(output_str)
 
 if __name__ == "__main__" :
     load_balances()
