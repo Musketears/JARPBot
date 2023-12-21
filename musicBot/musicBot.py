@@ -365,6 +365,17 @@ async def slots(ctx):
 @bot.command(name='update_bot', help='updates the bot')
 async def update_bot(ctx):
     subprocess.run(['bash','../pull_and_restart.sh'])
+    
+@bot.command(name='test_embed', help='test embed')
+async def test_embed(ctx):
+    embed=discord.Embed(title="Slots", description="")
+    embed.add_field(name="", value="7️⃣ | 7️⃣ | 🍋 \n 🍋 | 🔔 | 🍋 \n 🔔 | 7️⃣ | 💎", inline=False)
+    await ctx.send(embed=embed)
+    
+@bot.command(name='get_log', help="print log file out for errors enter a number after to print that many lines (default 20)")
+async def get_log(ctx, n = 20):
+    output = subprocess.run(['tail', 'musicBot.log', '-n', str(n)])
+    await ctx.send(output)
 
 if __name__ == "__main__" :
     load_balances()
