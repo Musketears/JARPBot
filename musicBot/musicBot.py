@@ -11,6 +11,7 @@ import asyncio
 import string
 import time
 import json
+import subprocess
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -360,6 +361,10 @@ async def slots(ctx):
         await ctx.send("Sorry, you didn't win anything. Better luck next time.")
 
     await ctx.send(f"Your new balance is: {user_balances[user_id]}.")
+    
+@bot.command(name='update_bot', help='updates the bot')
+async def update_bot(ctx):
+    subprocess.run(['bash','../pull_and_restart.sh'])
 
 if __name__ == "__main__" :
     load_balances()
