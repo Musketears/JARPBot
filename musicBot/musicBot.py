@@ -383,7 +383,6 @@ async def update_bot(ctx):
 async def test_embed(ctx):
     embed=discord.Embed(title="Slots", description="")
     embed.add_field(name="", value="7️⃣ | 7️⃣ | 🍋 \n 🍋 | 🔔 | 🍋 \n 🔔 | 7️⃣ | 💎", inline=False)
-    await ctx.send(embed=embed)
     
 @bot.command(name='get_log', help="print log file out for errors enter a number after to print that many lines (default 20)")
 async def get_log(ctx, n = 20):
@@ -418,16 +417,20 @@ async def ball(ctx, msg=None):
 
     selectedStatement = random.choice(responses)
     await ctx.send(selectedStatement)
-    
+ 
 @bot.command(name='rps', help='Play rock paper scissors')
 async def rps(ctx):
-    view = RockPaperScissorsView()
+    view = RockPaperScissorsView(ctx)
     await ctx.send("Please make your choice", view=view)
 
 class RockPaperScissorsView(discord.ui.View):
-    def __init__(self) -> None:
+    def __init__(self, ctx) -> None:
         super().__init__()
         self.add_item(RockPaperScissors())
+        self.ctx = ctx
+        
+    async def interaction_check(self, interaction: discord.Interaction):
+        return interaction.user.id == self.ctx.author.id
         
 class RockPaperScissors(discord.ui.Select):
     def __init__(self) -> None:
