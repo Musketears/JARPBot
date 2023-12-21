@@ -13,20 +13,50 @@ import time
 import json
 import subprocess
 import sqlite3
+import os.path
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 intents = discord.Intents().all()
 client = discord.Client(intents=intents)
-bot = commands.Bot(command_prefix='!',intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+Base = declarative_base()
+
+class Balance(Base):
+    __tablename__ = 'balances'
+
+    user_id = Column(String, primary_key=True)
+    balance = Column(Integer)
+
+engine = create_engine('sqlite:///user_balances.db')
+Session = sessionmaker(bind=engine)
 
 def init_db():
-    conn = sqlite3.connect('user_balances.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS balances (user_id TEXT PRIMARY KEY, balance INTEGER)''')
-    conn.commit()
-    conn.close()
+    Base.metadata.create_all(engine)
+
+def update_balance(user_id, amount):
+    session = Session()
+    balance = session.query(Balance).filter_by(user_id=user_id).first()
+
+    if balance:
+        balance.balance += amount
+    else:
+        balance = Balance(user_id=user_id, balance=100 + amount)
+        session.add(balance)
+
+    session.commit()
+    session.close()
+
+def load_balances():
+    session = Session()
+    balances = session.query(Balance).all()
+    session.close()
+    return {balance.user_id: balance.balance for balance in balances}
 
 queue = []
 is_stop = False
