@@ -517,7 +517,7 @@ async def pull(ctx):
         return
 
     update_balance(user_id, -bet)
-    
+
    #detemines rarity
     new_person = ""
     result = random.randint(1,100)
@@ -554,4 +554,5 @@ async def gacha_inv(ctx):
 
 if __name__ == "__main__" :
     load_balances()
+    load_gachas()
     bot.run(TOKEN)
