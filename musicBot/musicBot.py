@@ -235,11 +235,20 @@ async def alex_roulette(ctx):
                 await ctx.send("The bot is not connected to a voice channel.")
 
 @bot.command(name='gamble', help='Gamble your life savings')
-async def gamble(ctx, bet: int = None):
+async def gamble(ctx, bet: str = None):
     user_id = str(ctx.author.id)
     if user_id not in user_balances:
         update_balance(user_id, 0)
 
+    if bet == "all":
+        bet = user_balances[user_id]
+    else:
+        try:
+            bet = int(bet)
+        except ValueError:
+            await ctx.send("Make sure your bet is an integer.")
+            return
+    
     if bet is None or bet <= 0:
         await ctx.send("Use your brain and enter a bet too.")
         return
