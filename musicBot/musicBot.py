@@ -240,6 +240,10 @@ async def gamble(ctx, bet: str = None):
     if user_id not in user_balances:
         update_balance(user_id, 0)
 
+    if bet is None:
+        await ctx.send("Use your brain and enter a bet too.")
+    return
+    
     if bet == "all":
         bet = user_balances[user_id]
     else:
