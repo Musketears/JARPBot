@@ -7,5 +7,5 @@ setup(
    author='Ryan',
    author_email='ryanstack10@gmail.com',
    packages=['musicBot'],  #same as name
-   install_requires=['youtube_dl', 'discord', 'python-dotenv', 'youtube_search', 'yt_dlp', 'discord.py'], #external packages as dependencies
+   install_requires=['youtube_dl', 'discord', 'python-dotenv', 'youtube_search', 'yt_dlp', 'discord.py[voice]'], #external packages as dependencies
 )
