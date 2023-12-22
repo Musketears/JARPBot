@@ -383,7 +383,15 @@ async def update_bot(ctx):
 async def test_embed(ctx):
     embed=discord.Embed(title="Slots", description="")
     embed.add_field(name="", value="7️⃣ | 7️⃣ | 🍋 \n 🍋 | 🔔 | 🍋 \n 🔔 | 7️⃣ | 💎", inline=False)
-    await ctx.send(embed=embed)
+    msg = await ctx.send(embed=embed)
+    await asyncio.sleep(.5)
+    embed=discord.Embed(title="Slots", description="")
+    embed.add_field(name="", value="💎 | 💎 | 💎 \n 💎 | 💎 | 💎 \n 💎 | 💎 | 💎", inline=False)
+    await msg.edit(embed=embed)
+    await asyncio.sleep(.5)
+    embed=discord.Embed(title="Slots", description="")
+    embed.add_field(name="", value="🍋 | 🍋 | 🍋 \n 🍋 | 🍋 | 🍋 \n 🍋 | 🍋 | 🍋", inline=False)
+    await msg.edit(embed=embed)
     
 @bot.command(name='get_log', help="print log file out for errors enter a number after to print that many lines (default 20)")
 async def get_log(ctx, n = 20):
@@ -418,6 +426,47 @@ async def ball(ctx, msg=None):
 
     selectedStatement = random.choice(responses)
     await ctx.send(selectedStatement)
+    
+@bot.command(name='test_button', help='test button')
+async def test_button(ctx):
+    view = ButtonView()
+    await ctx.send(embed=getBlackjackEmbed(ctx), view=view)\
+
+def getBlackjackEmbed(ctx):
+    result_embed = discord.Embed(color=0xBEBEFE)
+    result_embed.title = "Blackjack"
+    result_embed.set_author(
+        name=ctx.author.name, icon_url=ctx.author.display_avatar.url
+    )
+    return result_embed
+    
+class ButtonView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__()
+        self.add_item(ButtonTest('hit', hitCallback))
+        self.add_item(ButtonTest('stay', stayCallback))
+        
+class ButtonTest(discord.ui.Button):
+    def __init__(self, name, cb) -> None:
+        self.cb = cb
+        super().__init__(
+            label=name
+        )
+        
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.cb(interaction)
+        
+async def hitCallback(interaction):
+    result_embed = interaction.message.embeds[0]
+    # result_embed = discord.Embed(color=0xBEBEFE)
+    result_embed.description = "You clicked hit!"
+    await interaction.response.edit_message(embed=result_embed)
+    
+async def stayCallback(interaction):
+    result_embed = interaction.message.embeds[0]
+    # result_embed = discord.Embed(color=0xBEBEFE)
+    result_embed.description = "You clicked stay!"
+    await interaction.response.edit_message(embed=result_embed)
     
 @bot.command(name='rps', help='Play rock paper scissors')
 async def rps(ctx):
