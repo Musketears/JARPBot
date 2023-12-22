@@ -134,8 +134,8 @@ async def play_url(ctx,url):
             voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename), after=lambda ex: bot.loop.create_task(play_next(ctx)))
             is_processing = False
         await ctx.send('**Now playing:** {}'.format(filename))
-    except:
-        await ctx.send(f"There was an error playing the song: {url}")
+    except Exception as e:
+        await ctx.send(f"There was an error playing the song: {url} \n {e}")
 
 @bot.command(name='play', help='To play song from youtube search')
 async def play(ctx,*args):
