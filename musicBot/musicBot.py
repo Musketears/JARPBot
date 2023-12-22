@@ -12,9 +12,12 @@ import string
 import time
 import json
 import subprocess
+import platform
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+
+ffmpeg_path = 'ffmpeg.exe' if platform.system() == 'Windows' else 'ffmpeg'
 
 intents = discord.Intents().all()
 client = discord.Client(intents=intents)
@@ -131,11 +134,11 @@ async def play_url(ctx,url):
             filename = await YTDLSource.from_url(url, loop=bot.loop)
             global current_file
             current_file = filename
-            voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=filename), after=lambda ex: bot.loop.create_task(play_next(ctx)))
+            voice_channel.play(discord.FFmpegPCMAudio(executable=ffmpeg_path, source=filename), after=lambda ex: bot.loop.create_task(play_next(ctx)))
             is_processing = False
         await ctx.send('**Now playing:** {}'.format(filename))
-    except:
-        await ctx.send("The bot is not connected to a voice channel.")
+    except Exception as e:
+        await ctx.send(f"There was an error playing the song: {url} \n {e}")
 
 @bot.command(name='play', help='To play song from youtube search')
 async def play(ctx,*args):
@@ -154,7 +157,7 @@ async def play_next(ctx):
         voice_channel = server.voice_client
         async with ctx.typing():
             current_file = queue[0]
-            voice_channel.play(discord.FFmpegPCMAudio(executable="ffmpeg.exe", source=queue[0]), after=lambda ex: bot.loop.create_task(play_next(ctx)))
+            voice_channel.play(discord.FFmpegPCMAudio(executable=ffmpeg_path, source=queue[0]), after=lambda ex: bot.loop.create_task(play_next(ctx)))
         await ctx.send('**Now playing:** {}'.format(queue.pop(0)))
     elif not is_stop:
         await ctx.send('There is nothing in queue')
