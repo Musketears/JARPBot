@@ -470,13 +470,17 @@ async def stayCallback(interaction):
     
 @bot.command(name='rps', help='Play rock paper scissors')
 async def rps(ctx):
-    view = RockPaperScissorsView()
+    view = RockPaperScissorsView(ctx)
     await ctx.send("Please make your choice", view=view)
 
 class RockPaperScissorsView(discord.ui.View):
-    def __init__(self) -> None:
+    def __init__(self, ctx) -> None:
         super().__init__()
         self.add_item(RockPaperScissors())
+        self.ctx = ctx
+        
+    async def interaction_check(self, interaction: discord.Interaction):
+        return interaction.user.id == self.ctx.author.id
         
 class RockPaperScissors(discord.ui.Select):
     def __init__(self) -> None:
