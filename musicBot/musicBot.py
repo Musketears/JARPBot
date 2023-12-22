@@ -135,7 +135,7 @@ async def play_url(ctx,url):
             is_processing = False
         await ctx.send('**Now playing:** {}'.format(filename))
     except:
-        await ctx.send("The bot is not connected to a voice channel.")
+        await ctx.send(f"There was an error playing the song: {url}")
 
 @bot.command(name='play', help='To play song from youtube search')
 async def play(ctx,*args):
