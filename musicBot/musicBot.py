@@ -13,9 +13,13 @@ import time
 import json
 import subprocess
 import platform
+import requests
+import base64
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
+SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET') 
 
 ffmpeg_path = 'ffmpeg.exe' if platform.system() == 'Windows' else 'ffmpeg'
 
@@ -541,7 +545,21 @@ class RockPaperScissors(discord.ui.Select):
         await interaction.response.edit_message(
             embed=result_embed, content=None, view=None
         )
+        
 
+@bot.command(name='playlist', help='Play a splotify playlist, paste the share link after')
+async def rps(ctx, link):
+    playlist_URI = link.split("/")[-1].split("?")[0]
+    SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/api/token'
+    SPOTIFY_AUTH_HEADERS = {'Authorization' : 'Basic ' + (base64.b64encode((SPOTIFY_CLIENT_ID + ":" + SPOTIFY_CLIENT_SECRET).encode())).decode("ascii")}
+    SPOTIFY_AUTH_BODY = {'grant_type' : 'client_credentials'}
+    SPOTIFY_AUTH_TOKEN = requests.post(SPOTIFY_AUTH_URL, data=SPOTIFY_AUTH_BODY, headers=SPOTIFY_AUTH_HEADERS).json()['access_token']
+
+    SPOTIFY_PLAYLIST_URL = 'https://api.spotify.com/v1/playlists/%s/tracks?fields=items(track(name,artists(name),href,album(name,href)))'
+    SPOTIFY_PLAYLIST_HEADERS = {'Authorization' : 'Bearer ' + SPOTIFY_AUTH_TOKEN}
+    SPOTIFY_PLAYLIST = [(item['track']['name'] + ' by ' + ', '.join([artist['name'] for artist in item['track']['artists']])) for item in requests.get(SPOTIFY_PLAYLIST_URL % playlist_URI, headers=SPOTIFY_PLAYLIST_HEADERS).json()['items']]
+    for item in SPOTIFY_PLAYLIST:
+        await play(ctx, item)
 
 if __name__ == "__main__" :
     load_balances()
