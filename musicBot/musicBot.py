@@ -555,9 +555,9 @@ async def rps(ctx, link):
     SPOTIFY_AUTH_BODY = {'grant_type' : 'client_credentials'}
     SPOTIFY_AUTH_TOKEN = requests.post(SPOTIFY_AUTH_URL, data=SPOTIFY_AUTH_BODY, headers=SPOTIFY_AUTH_HEADERS).json()['access_token']
 
-    SPOTIFY_PLAYLIST_URL = 'https://api.spotify.com/v1/playlists/%s/tracks?fields=items(track(name,href,album(name,href)))'
+    SPOTIFY_PLAYLIST_URL = 'https://api.spotify.com/v1/playlists/%s/tracks?fields=items(track(name,artists(name),href,album(name,href)))'
     SPOTIFY_PLAYLIST_HEADERS = {'Authorization' : 'Bearer ' + SPOTIFY_AUTH_TOKEN}
-    SPOTIFY_PLAYLIST = [item['track']['name'] for item in requests.get(SPOTIFY_PLAYLIST_URL % playlist_URI, headers=SPOTIFY_PLAYLIST_HEADERS).json()['items']]
+    SPOTIFY_PLAYLIST = [item['track']['name'] + ' by ' + item['track']['artists']['name'] for item in requests.get(SPOTIFY_PLAYLIST_URL % playlist_URI, headers=SPOTIFY_PLAYLIST_HEADERS).json()['items']]
     for item in SPOTIFY_PLAYLIST:
         await play(ctx, item)
     await ctx.send(SPOTIFY_PLAYLIST)
