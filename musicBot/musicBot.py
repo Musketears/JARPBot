@@ -560,7 +560,6 @@ async def rps(ctx, link):
     SPOTIFY_PLAYLIST = [(item['track']['name'] + ' by ' + ', '.join([artist['name'] for artist in item['track']['artists']])) for item in requests.get(SPOTIFY_PLAYLIST_URL % playlist_URI, headers=SPOTIFY_PLAYLIST_HEADERS).json()['items']]
     for item in SPOTIFY_PLAYLIST:
         await play(ctx, item)
-    await ctx.send(SPOTIFY_PLAYLIST)
 
 if __name__ == "__main__" :
     load_balances()
