@@ -75,6 +75,20 @@ class YTDLSource(discord.PCMVolumeTransformer):
         os.rename(og_filename, filename)
         return filename
 
+@bot.event
+async def on_ready():
+    await refresh(None)
+    
+@bot.command(name='refresh_status')
+async def refresh(ctx):
+    members = []
+    for guild in bot.guilds:
+        if guild.id == 1166433978681667614:
+            for member in guild.members:
+                if not member.bot:
+                    members.append(member.name)
+    
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"%s shower" % members[random.randint(0,len(members)-1)]))
 
 def update_balance(id, amount):
     global user_balances
