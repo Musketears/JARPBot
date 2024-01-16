@@ -90,6 +90,11 @@ async def refresh(ctx):
     
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"%s shower" % members[random.randint(0,len(members)-1)]))
 
+
+@bot.command(name='griddy')
+async def griddy(ctx):
+    await ctx.send('https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2loYXU5aDhobHN4Z20xZ2didGh6OHlpeXIxeXVncXAweGg2ZzBuMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ORbxetO61oO01fnRMB/giphy.gif')
+    
 def update_balance(id, amount):
     global user_balances
     if id in user_balances:
