@@ -33,8 +33,15 @@ is_processing = False
 current_file = ''
 balances_file = 'user_balances.json'
 griddies_file = 'griddy_balances.json'
+gachas_file = 'gacha_balances.json'
 user_balances = {}
 user_griddy = {}
+user_gachas = {}
+
+#{unique user id: {"balance":100, "person":["default person"]}, unique user id: {"balance":100, "person":["default person"]}, ...}
+person_pool = ["Alex","Ryan","Priscilla","Jackson","Holli","Nathan"]
+#adjective additional sell value will be equal to index of this list
+adjectives_pool = ["Default", "Homeless", "Dumb", "Boring", "Sleepy", "Hungry", "Hairy", "Stinky", "Silly", "Emo", "K/DA", "Edgelord", "Roided", "Zombie", "Smoll", "Tilted", "Large", "Biblically Accurate", "Skibidi", "Goated"]
 
 youtube_dl.utils.bug_reports_message = lambda: ''
 
@@ -136,6 +143,23 @@ def addgriddy(name):
         user_griddy[name] = 1
     with open(griddies_file, 'w') as file:
         json.dump(user_griddy, file)
+
+def load_gachas():
+    global user_gachas
+    try:
+        file = open(gachas_file, 'r')
+        user_gachas = json.load(file)
+    except FileNotFoundError:
+        user_gachas = {}
+
+def add_gacha(id, person_in):
+    global user_gachas
+    if id in user_gachas:
+        user_gachas[id].append(person_in)
+    else:
+        user_gachas[id] = [person_in]
+    with open(gachas_file, 'w') as file:
+        json.dump(user_gachas, file)
 
 @bot.command(name='join', help='Tells the bot to join the voice channel')
 async def join(ctx):
@@ -605,7 +629,59 @@ async def rps(ctx, link):
     for item in SPOTIFY_PLAYLIST:
         await play(ctx, item)
 
+@bot.command(name='pull', help='Pulls 1 person. Cost = 10')
+async def pull(ctx):
+    global person_pool
+    global adjectives_pool
+    user_id = str(ctx.author.id)
+    if user_id not in user_balances:
+        update_balance(user_id, 0)
+
+    bet = 10
+
+    if bet > user_balances[user_id]:
+        await ctx.send("You're too poor to play.")
+        return
+    
+   #detemines rarity
+    new_person = ""
+    result = random.randint(1,100)
+    if result == 1:
+        new_person = '5 ★ '
+
+    if result >= 2 and result <= 15:
+        new_person = '4 ★ '
+
+    if result >= 15 and result <= 50:
+        new_person = '3 ★ '
+    else:
+        new_person = '2 ★ '
+    
+    #pick random adjective
+    new_person = new_person + random.choice(adjectives_pool) + " "
+    #pick random person
+    new_person = new_person + random.choice(person_pool)
+    
+
+    update_balance(user_id, -bet)
+    add_gacha(user_id, new_person)
+    temp_balance = user_balances[user_id]
+    await ctx.send(f"Congratulations! You got a {new_person}!\nYour new balance is: {temp_balance}.")
+
+@bot.command(name='gacha_inv', help='Check your gacha inventory')
+async def gacha_inv(ctx):
+    global user_gachas
+    output_str = ""
+    user_id = str(ctx.author.id)
+    if user_id not in user_gachas:
+        await ctx.send("You are a new player. You have no gachas.")
+    else:
+        for person in user_gachas[user_id]:
+            output_str = output_str + person + "\n"
+        await ctx.send(output_str)
+
 if __name__ == "__main__" :
     load_balances()
     load_griddies()
+    load_gachas()
     bot.run(TOKEN)
