@@ -32,7 +32,9 @@ is_stop = False
 is_processing = False
 current_file = ''
 balances_file = 'user_balances.json'
+griddies_file = 'griddy_balances.json'
 user_balances = {}
+user_griddy = {}
 
 youtube_dl.utils.bug_reports_message = lambda: ''
 
@@ -95,6 +97,12 @@ async def refresh(ctx):
 async def griddy(ctx):
     await ctx.send('https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2loYXU5aDhobHN4Z20xZ2didGh6OHlpeXIxeXVncXAweGg2ZzBuMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ORbxetO61oO01fnRMB/giphy.gif')
     
+@bot.command(name='griddyon')
+async def griddyon(ctx, name):
+    addgriddy(name)
+    await ctx.send(name + 'has been griddied on ' + str(user_griddy[name]) + ' times https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2loYXU5aDhobHN4Z20xZ2didGh6OHlpeXIxeXVncXAweGg2ZzBuMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ORbxetO61oO01fnRMB/giphy.gif')
+    
+
 def update_balance(id, amount):
     global user_balances
     if id in user_balances:
@@ -111,6 +119,23 @@ def load_balances():
         user_balances = json.load(file)
     except FileNotFoundError:
         user_balances = {}
+        
+def load_griddies():
+    global user_griddy
+    try:
+        file = open(griddies_file, 'r')
+        user_griddy = json.load(file)
+    except FileNotFoundError:
+        user_griddy = {}
+        
+def addgriddy(name):
+    global user_griddy
+    if name in user_griddy:
+        user_griddy[name] += 1
+    else:
+        user_griddy[name] = 1
+    with open(griddies_file, 'w') as file:
+        json.dump(user_griddy, file)
 
 @bot.command(name='join', help='Tells the bot to join the voice channel')
 async def join(ctx):
@@ -582,4 +607,5 @@ async def rps(ctx, link):
 
 if __name__ == "__main__" :
     load_balances()
+    load_griddies()
     bot.run(TOKEN)
