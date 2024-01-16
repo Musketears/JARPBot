@@ -100,7 +100,8 @@ async def griddy(ctx):
 @bot.command(name='griddyon')
 async def griddyon(ctx, name):
     addgriddy(name)
-    await ctx.send(name + 'has been griddied on ' + str(user_griddy[name]) + ' times https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2loYXU5aDhobHN4Z20xZ2didGh6OHlpeXIxeXVncXAweGg2ZzBuMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ORbxetO61oO01fnRMB/giphy.gif')
+    await ctx.send(name + 'has been griddied on ' + str(user_griddy[name]) + ' times')
+    await griddy(ctx)
     
 
 def update_balance(id, amount):
