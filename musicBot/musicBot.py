@@ -15,6 +15,7 @@ import subprocess
 import platform
 import requests
 import base64
+import csv
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -102,14 +103,35 @@ async def refresh(ctx):
 
 @bot.command(name='griddy')
 async def griddy(ctx):
-    await ctx.send('https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2loYXU5aDhobHN4Z20xZ2didGh6OHlpeXIxeXVncXAweGg2ZzBuMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ORbxetO61oO01fnRMB/giphy.gif')
+    data = []
+    with open('griddyurls.csv', newline='') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            for item in row:
+                data.append(item)
+    await ctx.send(data[random.randint(0,len(data)-1)])
     
 @bot.command(name='griddyon')
 async def griddyon(ctx, name):
     addgriddy(name)
     await ctx.send(name + 'has been griddied on ' + str(user_griddy[name]) + ' times')
     await griddy(ctx)
-    
+
+@bot.command(name='addgriddyimg')
+async def addgriddyimg(ctx, url):
+    data = []
+    with open('griddyurls.csv', newline='') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            for item in row:
+                data.append(item)
+    data.append(url)
+    with open('griddyurls.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(data)
+
+        await ctx.send(url)
+        
 
 def update_balance(id, amount):
     global user_balances
