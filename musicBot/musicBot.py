@@ -102,20 +102,20 @@ async def refresh(ctx):
 
 
 @bot.command(name='griddy')
-async def griddy(ctx):
+async def griddy(ctx, msg=None):
     data = []
     with open('griddyurls.csv', newline='') as f:
         reader = csv.reader(f)
         for row in reader:
             for item in row:
                 data.append(item)
-    await ctx.send(data[random.randint(0,len(data)-1)])
+    await ctx.send(data[random.randint(0,len(data)-1)], reference=msg)
     
 @bot.command(name='griddyon')
 async def griddyon(ctx, name):
     addgriddy(name)
-    await ctx.send(name + ' has been griddied on ' + str(user_griddy[name]) + ' times')
-    await griddy(ctx)
+    msg = await ctx.send(name + ' has been griddied on ' + str(user_griddy[name]) + ' times')
+    await griddy(ctx, msg)
 
 @bot.command(name='addgriddyimg')
 async def addgriddyimg(ctx, url):
