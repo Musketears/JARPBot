@@ -114,7 +114,7 @@ async def griddy(ctx):
 @bot.command(name='griddyon')
 async def griddyon(ctx, name):
     addgriddy(name)
-    await ctx.send(name + 'has been griddied on ' + str(user_griddy[name]) + ' times')
+    await ctx.send(name + ' has been griddied on ' + str(user_griddy[name]) + ' times')
     await griddy(ctx)
 
 @bot.command(name='addgriddyimg')
