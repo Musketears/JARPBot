@@ -17,4 +17,4 @@ If on linux `sudo apt install ffmpeg` as the executable included will not work
 
 In the musicBot folder run `python3 musicBot.py`
 
-By Jackson Jost, Alex Mah, Ryan Stack, Priscilla Kang
+By Jackson, Alex, Ryan, Priscilla
