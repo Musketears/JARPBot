@@ -56,7 +56,7 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
+    'source_address': '0.0.0.0', # bind to ipv4 since ipv6 addresses cause issues sometimes
     'http_headers': {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
     }
