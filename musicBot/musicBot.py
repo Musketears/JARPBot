@@ -479,7 +479,11 @@ async def slots(ctx):
 @bot.command(name='update_bot', help='updates the bot')
 async def update_bot(ctx):
     subprocess.run(['bash','../pull_and_restart.sh'])
-    
+
+@bot.command(name='vpn', help='updates the vpn')
+async def update_vpn(ctx):
+    subprocess.run(['bash','nordvpn connect united_states'])
+
 @bot.command(name='test_embed', help='test embed')
 async def test_embed(ctx):
     embed=discord.Embed(title="Slots", description="")
