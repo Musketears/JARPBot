@@ -535,11 +535,10 @@ async def ball(ctx, msg=None):
 @bot.event
 async def on_message(message):
     if message.author == client.user:
-        await bot.process_commands(message)
         return
     if message.content.startswith('Where the heck'):
-        await bot.process_commands(message)
         await message.channel.send('She\'s waiting down in the lobby')
+    await bot.process_commands(message)
 
 @bot.command(name='test_button', help='test button')
 async def test_button(ctx):
