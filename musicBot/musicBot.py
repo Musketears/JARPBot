@@ -531,6 +531,13 @@ async def ball(ctx, msg=None):
 
     selectedStatement = random.choice(responses)
     await ctx.send(selectedStatement)
+    
+@bot.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    if "where the heck is" in message.content.lower():
+        await message.channel.send('She\'s waiting down in the lobby')
 
 @bot.command(name='test_button', help='test button')
 async def test_button(ctx):
