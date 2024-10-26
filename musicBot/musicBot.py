@@ -532,7 +532,7 @@ async def ball(ctx, msg=None):
     selectedStatement = random.choice(responses)
     await ctx.send(selectedStatement)
 
-@client.event
+@bot.event
 async def on_message(message):
     if message.author == client.user:
         return
