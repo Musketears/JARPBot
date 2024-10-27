@@ -5,7 +5,7 @@ import youtube_dl
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from youtube_search import YoutubeSearchF
+from youtube_search import YoutubeSearch
 import yt_dlp as youtube_dl
 import asyncio
 import string
