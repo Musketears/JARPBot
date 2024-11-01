@@ -304,7 +304,7 @@ def limit_to_4000_chars(strings, limit=4000):
             break
         # Add the string and a newline separator
         result += string + "\n"
-    return result.strip()  # Strip trailing newline if present
+    return result.strip() if len(result) > 0 else "There is nothing in queue"  # Strip trailing newline if present
 
 def remove_files(files):
     for file in files:
