@@ -16,6 +16,7 @@ import platform
 import requests
 import base64
 import csv
+import re
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -288,7 +289,22 @@ async def resume(ctx):
 
 @bot.command(name='queue', help='See whats in queue')
 async def print_queue(ctx):
-    await ctx.send(queue)
+    formatted_queue = []
+    for f in queue:
+        formatted_title = re.sub(r'\[.*', '', f).replace('_', ' ').strip()
+        formatted_title = re.sub(r'\.\w+$', '', formatted_title)
+        formatted_queue.append(formatted_title)
+    await ctx.send(limit_to_4000_chars(formatted_queue))
+
+def limit_to_4000_chars(strings, limit=4000):
+    result = ""
+    for string in strings:
+        # Check if adding the next string would exceed the limit
+        if len(result) + len(string) + 1 > limit:  # +1 for the newline or separator
+            break
+        # Add the string and a newline separator
+        result += string + "\n"
+    return result.strip()  # Strip trailing newline if present
 
 def remove_files(files):
     for file in files:
@@ -296,6 +312,11 @@ def remove_files(files):
             os.remove(file)
         else:
             print("The file does not exist" + str(file))
+
+@bot.command(name='shuffle', help='Shuffule the current queue')
+async def shuffle(ctx):
+    random.shuffle(queue)
+    await print_queue(ctx)
 
 @bot.command(name='alex_roulette', help='ggs')
 async def alex_roulette(ctx):
