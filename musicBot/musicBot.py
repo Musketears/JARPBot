@@ -503,7 +503,12 @@ async def update_bot(ctx):
 
 @bot.command(name='vpn', help='updates the vpn')
 async def update_vpn(ctx):
-    subprocess.run(['bash','nordvpn connect united_states'])
+    result = subprocess.run(['nordvpn','connect','united_states'])
+    while True:
+        try:
+            await ctx.send(result.stdout)
+        except:
+            pass
 
 @bot.command(name='test_embed', help='test embed')
 async def test_embed(ctx):
