@@ -683,7 +683,7 @@ async def rps(ctx, link):
     SPOTIFY_PLAYLIST_HEADERS = {'Authorization' : 'Bearer ' + SPOTIFY_AUTH_TOKEN}
     SPOTIFY_PLAYLIST = [(item['track']['name'] + ' by ' + ', '.join([artist['name'] for artist in item['track']['artists']])) for item in requests.get(SPOTIFY_PLAYLIST_URL % playlist_URI, headers=SPOTIFY_PLAYLIST_HEADERS).json()['items']]
     for item in SPOTIFY_PLAYLIST:
-        await play(ctx, item)
+        await play(ctx, item + ' lyrics')
 
 @bot.command(name='pull', help='Pulls 1 person. Cost = 10')
 async def pull(ctx):
