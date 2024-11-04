@@ -682,6 +682,7 @@ async def rps(ctx, link):
     SPOTIFY_PLAYLIST_URL = 'https://api.spotify.com/v1/playlists/%s/tracks?fields=items(track(name,artists(name),href,album(name,href)))'
     SPOTIFY_PLAYLIST_HEADERS = {'Authorization' : 'Bearer ' + SPOTIFY_AUTH_TOKEN}
     SPOTIFY_PLAYLIST = [(item['track']['name'] + ' by ' + ', '.join([artist['name'] for artist in item['track']['artists']])) for item in requests.get(SPOTIFY_PLAYLIST_URL % playlist_URI, headers=SPOTIFY_PLAYLIST_HEADERS).json()['items']]
+    random.shuffle(SPOTIFY_PLAYLIST)
     for item in SPOTIFY_PLAYLIST:
         await play(ctx, item + ' lyrics')
 
