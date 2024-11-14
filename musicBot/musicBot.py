@@ -6,6 +6,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from youtube_search import YoutubeSearch
+from collections import deque
 import yt_dlp as youtube_dl
 import asyncio
 import string
@@ -29,7 +30,7 @@ intents = discord.Intents().all()
 client = discord.Client(intents=intents)
 bot = commands.Bot(command_prefix='!',intents=intents)
 
-queue = []
+queue = deque([])
 is_stop = False
 is_processing = False
 current_file = ''
@@ -245,6 +246,41 @@ async def play(ctx,*args):
         delimiter = ' '
         url = "https://www.youtube.com" + YoutubeSearch(delimiter.join(args), max_results=1).to_dict()[0]['url_suffix']
         await play_url(ctx, url)
+    except:
+        await ctx.send("The bot is not connected to a voice channel.")
+
+async def play_url_first(ctx,url):
+    global is_processing
+    try :
+        voice_client = ctx.message.guild.voice_client
+        if voice_client == None:
+            voice_client = ctx.message.author.voice.channel
+            await voice_client.connect()
+            await play_url(ctx, url)
+            return
+        if is_processing or voice_client.is_playing():
+            filename = await YTDLSource.from_url(url, loop=bot.loop)
+            queue.appendleft(filename)
+            return
+        server = ctx.message.guild
+        voice_channel = server.voice_client
+        async with ctx.typing():
+            is_processing = True
+            filename = await YTDLSource.from_url(url, loop=bot.loop)
+            global current_file
+            current_file = filename
+            voice_channel.play(discord.FFmpegPCMAudio(executable=ffmpeg_path, source=filename), after=lambda ex: bot.loop.create_task(play_next(ctx)))
+            is_processing = False
+        await ctx.send('**Now playing:** {}'.format(filename))
+    except Exception as e:
+        await ctx.send(f"There was an error playing the song: {url} \n {e}")
+
+@bot.command(name='play_first', help='Queues a song in front of the current queue')
+async def play_first(ctx,*args):
+    try :
+        delimiter = ' '
+        url = "https://www.youtube.com" + YoutubeSearch(delimiter.join(args), max_results=1).to_dict()[0]['url_suffix']
+        await play_url_first(ctx, url)
     except:
         await ctx.send("The bot is not connected to a voice channel.")
 
