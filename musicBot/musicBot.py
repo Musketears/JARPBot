@@ -6,7 +6,6 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from youtube_search import YoutubeSearch
-from collections import deque
 import yt_dlp as youtube_dl
 import asyncio
 import string
@@ -30,7 +29,7 @@ intents = discord.Intents().all()
 client = discord.Client(intents=intents)
 bot = commands.Bot(command_prefix='!',intents=intents)
 
-queue = deque([])
+queue = []
 is_stop = False
 is_processing = False
 current_file = ''
@@ -260,7 +259,7 @@ async def play_url_first(ctx,url):
             return
         if is_processing or voice_client.is_playing():
             filename = await YTDLSource.from_url(url, loop=bot.loop)
-            queue.appendleft(filename)
+            queue.insert(0, filename)
             return
         server = ctx.message.guild
         voice_channel = server.voice_client
