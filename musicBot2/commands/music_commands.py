@@ -11,6 +11,7 @@ import os
 
 from music.player import music_player, YTDLSource
 from utils.database import db
+from utils.cache_manager import cache_manager
 from utils.error_handler import handle_errors, log_command
 from utils.helpers import validate_youtube_url, format_duration, create_success_embed, create_error_embed, create_info_embed
 from config import config
@@ -741,6 +742,164 @@ class MusicCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error getting song stats: {e}")
             embed = create_error_embed("Error retrieving music statistics.")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='cache', help='Show cache statistics')
+    @handle_errors
+    @log_command
+    async def cache_stats(self, ctx):
+        """Show cache statistics"""
+        try:
+            stats = await cache_manager.get_cache_stats()
+            
+            if not stats['enabled']:
+                embed = create_info_embed("Cache Disabled", "Audio cache is currently disabled.")
+                await ctx.send(embed=embed)
+                return
+            
+            embed = discord.Embed(
+                title="💾 Cache Statistics",
+                description="Audio cache performance and usage",
+                color=0x1DB954
+            )
+            
+            embed.add_field(
+                name="📊 Usage",
+                value=f"**Songs:** {stats['total_songs']}\n**Size:** {stats['actual_disk_size_mb']}MB / {stats['max_size_mb']}MB\n**Files:** {stats['audio_files']} audio, {stats['normalized_files']} normalized",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="⚙️ Settings",
+                value=f"**Max Age:** {stats['max_age_days']} days\n**Status:** {'✅ Enabled' if stats['enabled'] else '❌ Disabled'}",
+                inline=True
+            )
+            
+            # Add top songs if available
+            if stats.get('top_songs'):
+                top_songs_text = "\n".join([
+                    f"**{i+1}.** {song['title']} ({song['access_count']} plays)"
+                    for i, song in enumerate(stats['top_songs'][:3])
+                ])
+                embed.add_field(
+                    name="🔥 Most Cached",
+                    value=top_songs_text,
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error getting cache stats: {e}")
+            embed = create_error_embed("Error retrieving cache statistics.")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='cache_cleanup', help='Clean up old cache entries')
+    @handle_errors
+    @log_command
+    async def cache_cleanup(self, ctx):
+        """Clean up old cache entries"""
+        try:
+            embed = create_info_embed("Cleaning Cache", "Cleaning up old cache entries...")
+            await ctx.send(embed=embed)
+            
+            result = await cache_manager.cleanup_cache()
+            
+            if result['cleaned'] > 0:
+                embed = create_success_embed(
+                    f"Cache Cleanup Complete",
+                    f"Removed **{result['cleaned']}** entries and freed **{result['freed_mb']}MB** of space."
+                )
+            else:
+                embed = create_info_embed(
+                    "Cache Cleanup Complete",
+                    "No cache entries needed cleanup."
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error during cache cleanup: {e}")
+            embed = create_error_embed(f"Error during cache cleanup: {str(e)}")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='cache_clear', help='Clear all cache entries (admin only)')
+    @handle_errors
+    @log_command
+    async def cache_clear(self, ctx):
+        """Clear all cache entries"""
+        # Check if user has admin permissions
+        if not ctx.author.guild_permissions.administrator:
+            embed = create_error_embed("Permission Denied", "You need administrator permissions to clear the cache.")
+            await ctx.send(embed=embed)
+            return
+        
+        try:
+            embed = discord.Embed(
+                title="⚠️ Clear Cache",
+                description="Are you sure you want to clear all cache entries? This will remove all cached songs.",
+                color=0xFFA500
+            )
+            embed.add_field(
+                name="This will:",
+                value="• Remove all cached audio files\n• Clear cache database entries\n• Free up disk space",
+                inline=False
+            )
+            
+            # Add confirmation buttons
+            from discord.ui import View, Button
+            from discord import ButtonStyle
+            
+            class CacheClearView(View):
+                def __init__(self, ctx):
+                    super().__init__(timeout=30.0)
+                    self.ctx = ctx
+                
+                async def interaction_check(self, interaction):
+                    return interaction.user.id == self.ctx.author.id
+                
+                @discord.ui.button(label="Clear Cache", style=ButtonStyle.danger)
+                async def clear_cache(self, interaction, button):
+                    try:
+                        # Get cache stats before clearing
+                        stats = await cache_manager.get_cache_stats()
+                        total_songs = stats.get('total_songs', 0)
+                        total_size = stats.get('actual_disk_size_mb', 0)
+                        
+                        # Clear cache database
+                        await db.cleanup_old_cache(0)  # Remove all entries
+                        
+                        # Clear cache files
+                        import shutil
+                        if os.path.exists(cache_manager.audio_dir):
+                            shutil.rmtree(cache_manager.audio_dir)
+                            os.makedirs(cache_manager.audio_dir)
+                        if os.path.exists(cache_manager.normalized_dir):
+                            shutil.rmtree(cache_manager.normalized_dir)
+                            os.makedirs(cache_manager.normalized_dir)
+                        
+                        embed = create_success_embed(
+                            "Cache Cleared",
+                            f"Successfully cleared **{total_songs}** cached songs and freed **{total_size}MB** of space."
+                        )
+                        await interaction.response.edit_message(embed=embed, view=None)
+                        
+                    except Exception as e:
+                        logger.error(f"Error clearing cache: {e}")
+                        embed = create_error_embed(f"Error clearing cache: {str(e)}")
+                        await interaction.response.edit_message(embed=embed, view=None)
+                
+                @discord.ui.button(label="Cancel", style=ButtonStyle.secondary)
+                async def cancel(self, interaction, button):
+                    embed = create_info_embed("Cancelled", "Cache clear operation cancelled.")
+                    await interaction.response.edit_message(embed=embed, view=None)
+            
+            view = CacheClearView(ctx)
+            await ctx.send(embed=embed, view=view)
+            
+        except Exception as e:
+            logger.error(f"Error setting up cache clear: {e}")
+            embed = create_error_embed(f"Error setting up cache clear: {str(e)}")
             await ctx.send(embed=embed)
 
 async def setup(bot):

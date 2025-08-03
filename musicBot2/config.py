@@ -56,6 +56,12 @@ class BotConfig:
     max_volume: float = 1.0
     default_volume: float = 0.5
     
+    # Cache settings
+    cache_enabled: bool = True
+    cache_max_size: int = 1024  # MB
+    cache_max_age: int = 30  # days
+    cache_directory: str = "cache"
+    
     def __post_init__(self):
         if self.ffmpeg_path is None:
             self.ffmpeg_path = get_ffmpeg_path()

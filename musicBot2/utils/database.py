@@ -91,6 +91,30 @@ class DatabaseManager:
                 )
             """)
             
+            # Cache tracking table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audio_cache (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    youtube_id TEXT UNIQUE,
+                    title TEXT,
+                    duration INTEGER,
+                    filename TEXT,
+                    normalized_filename TEXT,
+                    file_size INTEGER,
+                    download_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    access_count INTEGER DEFAULT 0
+                )
+            """)
+            
+            # Cache settings table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cache_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            
             # Create indexes for better performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_gacha_user_id ON gacha_inventory(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_gambling_user_id ON gambling_history(user_id)")
@@ -503,6 +527,161 @@ class DatabaseManager:
                 }
         
         return await asyncio.to_thread(_get_user_song_stats)
+    
+    async def get_cached_song(self, youtube_id: str) -> Optional[Dict[str, Any]]:
+        """Get cached song information"""
+        def _get_cached_song():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT youtube_id, title, duration, filename, normalized_filename, 
+                           file_size, download_date, last_accessed, access_count
+                    FROM audio_cache WHERE youtube_id = ?
+                    """,
+                    (youtube_id,)
+                )
+                result = cursor.fetchone()
+                if result:
+                    return {
+                        'youtube_id': result[0],
+                        'title': result[1],
+                        'duration': result[2],
+                        'filename': result[3],
+                        'normalized_filename': result[4],
+                        'file_size': result[5],
+                        'download_date': result[6],
+                        'last_accessed': result[7],
+                        'access_count': result[8]
+                    }
+                return None
+        
+        return await asyncio.to_thread(_get_cached_song)
+    
+    async def add_cached_song(self, youtube_id: str, title: str, duration: int, 
+                             filename: str, normalized_filename: str = None, file_size: int = 0):
+        """Add a song to the cache"""
+        def _add_cached_song():
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO audio_cache 
+                    (youtube_id, title, duration, filename, normalized_filename, file_size, 
+                     download_date, last_accessed, access_count)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                    """,
+                    (youtube_id, title, duration, filename, normalized_filename, file_size)
+                )
+        
+        await asyncio.to_thread(_add_cached_song)
+    
+    async def update_cache_access(self, youtube_id: str):
+        """Update cache access time and count"""
+        def _update_cache_access():
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    UPDATE audio_cache 
+                    SET last_accessed = CURRENT_TIMESTAMP, access_count = access_count + 1
+                    WHERE youtube_id = ?
+                    """,
+                    (youtube_id,)
+                )
+        
+        await asyncio.to_thread(_update_cache_access)
+    
+    async def remove_cached_song(self, youtube_id: str):
+        """Remove a song from cache"""
+        def _remove_cached_song():
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("DELETE FROM audio_cache WHERE youtube_id = ?", (youtube_id,))
+        
+        await asyncio.to_thread(_remove_cached_song)
+    
+    async def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        def _get_cache_stats():
+            with sqlite3.connect(self.db_path) as conn:
+                # Total cached songs
+                cursor = conn.execute("SELECT COUNT(*) FROM audio_cache")
+                total_songs = cursor.fetchone()[0]
+                
+                # Total cache size
+                cursor = conn.execute("SELECT SUM(file_size) FROM audio_cache")
+                total_size = cursor.fetchone()[0] or 0
+                
+                # Most accessed songs
+                cursor = conn.execute(
+                    "SELECT title, access_count FROM audio_cache ORDER BY access_count DESC LIMIT 5"
+                )
+                top_songs = [{'title': row[0], 'access_count': row[1]} for row in cursor.fetchall()]
+                
+                # Oldest cached songs
+                cursor = conn.execute(
+                    "SELECT title, download_date FROM audio_cache ORDER BY download_date ASC LIMIT 5"
+                )
+                oldest_songs = [{'title': row[0], 'download_date': row[1]} for row in cursor.fetchall()]
+                
+                return {
+                    'total_songs': total_songs,
+                    'total_size_mb': round(total_size / (1024 * 1024), 2),
+                    'top_songs': top_songs,
+                    'oldest_songs': oldest_songs
+                }
+        
+        return await asyncio.to_thread(_get_cache_stats)
+    
+    async def cleanup_old_cache(self, max_age_days: int = 30):
+        """Remove old cache entries"""
+        def _cleanup_old_cache():
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    DELETE FROM audio_cache 
+                    WHERE julianday('now') - julianday(download_date) > ?
+                    """,
+                    (max_age_days,)
+                )
+        
+        await asyncio.to_thread(_cleanup_old_cache)
+    
+    async def get_cache_entries_to_cleanup(self, max_size_mb: int) -> List[Dict[str, Any]]:
+        """Get cache entries that should be cleaned up based on size"""
+        def _get_cleanup_entries():
+            with sqlite3.connect(self.db_path) as conn:
+                # Get total current size
+                cursor = conn.execute("SELECT SUM(file_size) FROM audio_cache")
+                total_size = cursor.fetchone()[0] or 0
+                max_size_bytes = max_size_mb * 1024 * 1024
+                
+                if total_size <= max_size_bytes:
+                    return []
+                
+                # Get entries to remove (oldest and least accessed first)
+                cursor = conn.execute(
+                    """
+                    SELECT youtube_id, title, file_size, access_count, download_date
+                    FROM audio_cache 
+                    ORDER BY access_count ASC, download_date ASC
+                    """
+                )
+                entries = []
+                current_size = total_size
+                
+                for row in cursor.fetchall():
+                    if current_size <= max_size_bytes:
+                        break
+                    entries.append({
+                        'youtube_id': row[0],
+                        'title': row[1],
+                        'file_size': row[2],
+                        'access_count': row[3],
+                        'download_date': row[4]
+                    })
+                    current_size -= row[2]
+                
+                return entries
+        
+        return await asyncio.to_thread(_get_cleanup_entries)
 
 # Global database instance
 db = DatabaseManager() 

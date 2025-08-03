@@ -11,6 +11,7 @@ from datetime import datetime
 from config import config
 from utils.error_handler import setup_logging, ErrorHandler
 from utils.database import db
+from utils.cache_manager import cache_manager
 from utils.helpers import create_status_embed
 
 # Setup logging
@@ -44,6 +45,9 @@ async def on_ready():
     
     # Load all cogs
     await load_extensions()
+    
+    # Start periodic cache cleanup task
+    asyncio.create_task(periodic_cache_cleanup())
     
     logger.info('Bot is ready!')
 
@@ -123,6 +127,27 @@ async def update_status():
                 await bot.change_presence(activity=activity)
     except Exception as e:
         logger.error(f'Error updating status: {e}')
+
+async def periodic_cache_cleanup():
+    """Periodic cache cleanup task"""
+    while True:
+        try:
+            # Wait for 6 hours before first cleanup
+            await asyncio.sleep(6 * 60 * 60)  # 6 hours
+            
+            logger.info("Starting periodic cache cleanup...")
+            result = await cache_manager.cleanup_cache()
+            
+            if result['cleaned'] > 0:
+                logger.info(f"Periodic cache cleanup: {result['cleaned']} entries removed, {result['freed_mb']}MB freed")
+            else:
+                logger.info("Periodic cache cleanup: No entries needed cleanup")
+                
+        except Exception as e:
+            logger.error(f"Error during periodic cache cleanup: {e}")
+        
+        # Run cleanup every 12 hours
+        await asyncio.sleep(12 * 60 * 60)  # 12 hours
 
 @bot.command(name='status', help='Show bot status')
 async def status(ctx):

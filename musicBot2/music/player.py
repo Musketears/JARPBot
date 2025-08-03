@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 from config import youtube_config, config
+from utils.cache_manager import cache_manager
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,21 @@ class MusicPlayer:
     async def download_track(self, url: str, requester_id: int, requester_name: str) -> Track:
         """Download a track from URL and normalize audio"""
         try:
+            # Check cache first
+            cached_song = await cache_manager.get_cached_song(url)
+            if cached_song:
+                logger.info(f"Using cached version of: {cached_song['title']}")
+                return Track(
+                    title=cached_song['title'],
+                    url=url,
+                    duration=cached_song['duration'],
+                    requester_id=requester_id,
+                    requester_name=requester_name,
+                    filename=cached_song['audio_file'],
+                    thumbnail=None,  # We don't store thumbnails in cache
+                    normalized_filename=cached_song['normalized_file']
+                )
+            
             # Extract info first
             loop = asyncio.get_event_loop()
             data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False))
@@ -177,6 +193,17 @@ class MusicPlayer:
                     None, 
                     self.normalize_audio_file, 
                     unique_filename
+                )
+            
+            # Add to cache
+            youtube_id = cache_manager.extract_youtube_id(url)
+            if youtube_id:
+                await cache_manager.add_to_cache(
+                    youtube_id=youtube_id,
+                    title=data.get('title', 'Unknown Title'),
+                    duration=data.get('duration', 0),
+                    original_file=unique_filename,
+                    normalized_file=normalized_filename
                 )
             
             return Track(
@@ -257,14 +284,39 @@ class MusicPlayer:
         """Clean up downloaded files"""
         for track in tracks:
             try:
+                # Only clean up files that are not in cache
                 if os.path.exists(track.filename):
-                    os.remove(track.filename)
-                    logger.debug(f"Cleaned up file: {track.filename}")
+                    # Check if this is a cached file
+                    is_cached = False
+                    if hasattr(track, 'url'):
+                        youtube_id = cache_manager.extract_youtube_id(track.url)
+                        if youtube_id:
+                            cached_info = await db.get_cached_song(youtube_id)
+                            if cached_info and cached_info['filename'] == os.path.basename(track.filename):
+                                is_cached = True
+                    
+                    if not is_cached:
+                        os.remove(track.filename)
+                        logger.debug(f"Cleaned up file: {track.filename}")
+                    else:
+                        logger.debug(f"Skipped cleanup of cached file: {track.filename}")
                 
                 # Clean up normalized file if it exists
                 if track.normalized_filename and os.path.exists(track.normalized_filename):
-                    os.remove(track.normalized_filename)
-                    logger.debug(f"Cleaned up normalized file: {track.normalized_filename}")
+                    # Check if this is a cached normalized file
+                    is_cached_normalized = False
+                    if hasattr(track, 'url'):
+                        youtube_id = cache_manager.extract_youtube_id(track.url)
+                        if youtube_id:
+                            cached_info = await db.get_cached_song(youtube_id)
+                            if cached_info and cached_info['normalized_filename'] == os.path.basename(track.normalized_filename):
+                                is_cached_normalized = True
+                    
+                    if not is_cached_normalized:
+                        os.remove(track.normalized_filename)
+                        logger.debug(f"Cleaned up normalized file: {track.normalized_filename}")
+                    else:
+                        logger.debug(f"Skipped cleanup of cached normalized file: {track.normalized_filename}")
             except Exception as e:
                 logger.error(f"Error cleaning up file {track.filename}: {e}")
 
