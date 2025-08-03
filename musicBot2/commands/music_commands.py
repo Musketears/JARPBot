@@ -61,15 +61,19 @@ class MusicCommands(commands.Cog):
             await ctx.send(embed=embed)
             return
         
+        # Clean up current track files
+        music_player.cleanup_current_track()
+        
         # Clean up queue and files
         music_player.clear_queue()
-        if self.current_file and os.path.exists(self.current_file):
-            os.remove(self.current_file)
         
-        # Clean up normalized files
-        if music_player.current_track and music_player.current_track.normalized_filename:
-            if os.path.exists(music_player.current_track.normalized_filename):
-                os.remove(music_player.current_track.normalized_filename)
+        # Clean up any remaining files
+        if self.current_file and os.path.exists(self.current_file):
+            try:
+                os.remove(self.current_file)
+                logger.debug(f"Cleaned up file: {self.current_file}")
+            except Exception as e:
+                logger.error(f"Error cleaning up file {self.current_file}: {e}")
         
         await voice_client.disconnect()
         embed = create_success_embed("Left the voice channel")
@@ -166,6 +170,9 @@ class MusicCommands(commands.Cog):
             embed = create_error_embed("I'm not playing anything right now.")
             await ctx.send(embed=embed)
             return
+        
+        # Clean up current track files before stopping
+        music_player.cleanup_current_track()
         
         voice_client.stop()
         embed = create_success_embed("Skipped the current song")
@@ -270,7 +277,12 @@ class MusicCommands(commands.Cog):
     @log_command
     async def clear(self, ctx):
         """Clear the music queue"""
+        # Clean up current track files
+        music_player.cleanup_current_track()
+        
+        # Clear queue and clean up files
         music_player.clear_queue()
+        
         embed = create_success_embed("Cleared the queue")
         await ctx.send(embed=embed)
     
@@ -346,6 +358,23 @@ class MusicCommands(commands.Cog):
         )
         
         await ctx.send(embed=embed)
+    
+    @commands.command(name='cleanup', help='Clean up orphaned audio files')
+    @handle_errors
+    @log_command
+    async def cleanup(self, ctx):
+        """Clean up orphaned audio files"""
+        embed = create_info_embed("Cleaning Up", "Cleaning up orphaned audio files...")
+        await ctx.send(embed=embed)
+        
+        try:
+            music_player.cleanup_orphaned_files()
+            embed = create_success_embed("Orphaned audio files have been cleaned up.")
+            await ctx.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+            embed = create_error_embed(f"Error during cleanup: {str(e)}")
+            await ctx.send(embed=embed)
     
     @commands.command(name='playlist', help='Play a Spotify playlist')
     @handle_errors
@@ -486,13 +515,15 @@ class MusicCommands(commands.Cog):
             if os.path.exists(track.filename):
                 try:
                     os.remove(track.filename)
-                except:
-                    pass
+                    logger.debug(f"Cleaned up file: {track.filename}")
+                except Exception as cleanup_error:
+                    logger.error(f"Error cleaning up file {track.filename}: {cleanup_error}")
             if track.normalized_filename and os.path.exists(track.normalized_filename):
                 try:
                     os.remove(track.normalized_filename)
-                except:
-                    pass
+                    logger.debug(f"Cleaned up normalized file: {track.normalized_filename}")
+                except Exception as cleanup_error:
+                    logger.error(f"Error cleaning up normalized file {track.normalized_filename}: {cleanup_error}")
             
             embed = create_error_embed(f"Error playing track: {str(e)}")
             await ctx.send(embed=embed)
@@ -501,9 +532,16 @@ class MusicCommands(commands.Cog):
     
     async def _play_next(self, ctx):
         """Play the next track in queue"""
-        # Clean up current file
+        # Clean up current track files
+        music_player.cleanup_current_track()
+        
+        # Clean up any remaining files
         if self.current_file and os.path.exists(self.current_file):
-            os.remove(self.current_file)
+            try:
+                os.remove(self.current_file)
+                logger.debug(f"Cleaned up file: {self.current_file}")
+            except Exception as e:
+                logger.error(f"Error cleaning up file {self.current_file}: {e}")
         
         if music_player.queue:
             next_track = music_player.queue.pop(0)

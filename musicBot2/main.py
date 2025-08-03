@@ -4,6 +4,8 @@ import asyncio
 import logging
 import os
 import random
+import signal
+import sys
 from datetime import datetime
 
 from config import config
@@ -16,9 +18,20 @@ setup_logging()
 
 logger = logging.getLogger(__name__)
 
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    logger.info(f'Received signal {signum}, shutting down gracefully...')
+    
+    # Schedule bot shutdown
+    asyncio.create_task(bot.close())
+
 # Bot setup
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=config.command_prefix, intents=intents)
+
+# Set up signal handlers for graceful shutdown
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 @bot.event
 async def on_ready():
@@ -33,6 +46,40 @@ async def on_ready():
     await load_extensions()
     
     logger.info('Bot is ready!')
+
+@bot.event
+async def on_disconnect():
+    """Called when the bot disconnects"""
+    logger.info('Bot disconnected from Discord')
+
+@bot.event
+async def on_close():
+    """Called when the bot is closing"""
+    logger.info('Bot is shutting down, cleaning up files...')
+    
+    # Clean up music files
+    try:
+        from music.player import music_player
+        if music_player.current_track:
+            music_player.cleanup_current_track()
+        if music_player.queue:
+            await music_player.cleanup_files(music_player.queue)
+        
+        # Clean up orphaned files
+        music_player.cleanup_orphaned_files()
+        
+        logger.info('Music files cleaned up successfully')
+    except Exception as e:
+        logger.error(f'Error cleaning up music files: {e}')
+    
+    # Close database connection
+    try:
+        await db.close()
+        logger.info('Database connection closed')
+    except Exception as e:
+        logger.error(f'Error closing database connection: {e}')
+    
+    logger.info('Bot shutdown complete')
 
 @bot.event
 async def on_command_error(ctx, error):

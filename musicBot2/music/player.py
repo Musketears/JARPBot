@@ -215,9 +215,13 @@ class MusicPlayer:
         return None
     
     def clear_queue(self):
-        """Clear the queue"""
+        """Clear the queue and clean up files"""
+        # Clean up files for all tracks in queue
+        if self.queue:
+            asyncio.create_task(self.cleanup_files(self.queue))
+        
         self.queue.clear()
-        logger.info("Queue cleared")
+        logger.info("Queue cleared and files cleaned up")
     
     def shuffle_queue(self):
         """Shuffle the queue"""
@@ -263,6 +267,36 @@ class MusicPlayer:
                     logger.debug(f"Cleaned up normalized file: {track.normalized_filename}")
             except Exception as e:
                 logger.error(f"Error cleaning up file {track.filename}: {e}")
+
+    def cleanup_current_track(self):
+        """Clean up files for the current track"""
+        if self.current_track:
+            asyncio.create_task(self.cleanup_files([self.current_track]))
+            self.current_track = None
+            logger.info("Current track files cleaned up")
+    
+    def cleanup_orphaned_files(self):
+        """Clean up any orphaned audio files in the current directory"""
+        try:
+            import glob
+            # Look for common audio file patterns that might be orphaned
+            audio_patterns = ['*.mp3', '*.m4a', '*.webm', '*.ogg', '*.wav', '*.flac']
+            
+            for pattern in audio_patterns:
+                files = glob.glob(pattern)
+                for file in files:
+                    try:
+                        # Only remove files that look like they were downloaded by yt-dlp
+                        # (contain random strings or specific patterns)
+                        if any(char in file for char in string.ascii_letters + string.digits):
+                            os.remove(file)
+                            logger.debug(f"Cleaned up orphaned file: {file}")
+                    except Exception as e:
+                        logger.error(f"Error cleaning up orphaned file {file}: {e}")
+            
+            logger.info("Orphaned files cleanup completed")
+        except Exception as e:
+            logger.error(f"Error during orphaned files cleanup: {e}")
 
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
