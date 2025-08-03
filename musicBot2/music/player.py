@@ -11,6 +11,7 @@ from datetime import datetime
 import logging
 from config import youtube_config, config
 from utils.cache_manager import cache_manager
+from utils.database import db
 
 logger = logging.getLogger(__name__)
 
