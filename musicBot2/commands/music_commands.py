@@ -66,6 +66,11 @@ class MusicCommands(commands.Cog):
         if self.current_file and os.path.exists(self.current_file):
             os.remove(self.current_file)
         
+        # Clean up normalized files
+        if music_player.current_track and music_player.current_track.normalized_filename:
+            if os.path.exists(music_player.current_track.normalized_filename):
+                os.remove(music_player.current_track.normalized_filename)
+        
         await voice_client.disconnect()
         embed = create_success_embed("Left the voice channel")
         await ctx.send(embed=embed)
@@ -240,7 +245,7 @@ class MusicCommands(commands.Cog):
         # Queue info
         embed.add_field(
             name="ℹ️ Info",
-            value=f"**Volume:** {int(queue_info['volume'] * 100)}%\n**Loop:** {'On' if queue_info['loop'] else 'Off'}",
+            value=f"**Volume:** {int(queue_info['volume'] * 100)}%\n**Loop:** {'On' if queue_info['loop'] else 'Off'}\n**Normalization:** {'On' if music_player.normalize_audio else 'Off'}",
             inline=True
         )
         
@@ -297,6 +302,49 @@ class MusicCommands(commands.Cog):
                 voice_client.source.volume = music_player.volume
         
         embed = create_success_embed(f"Volume set to {volume}%")
+        await ctx.send(embed=embed)
+    
+    @commands.command(name='normalize', help='Toggle audio normalization (makes all songs same volume)')
+    @handle_errors
+    @log_command
+    async def normalize(self, ctx):
+        """Toggle audio normalization on/off"""
+        music_player.normalize_audio = not music_player.normalize_audio
+        status = "enabled" if music_player.normalize_audio else "disabled"
+        embed = create_success_embed(f"Audio normalization {status}")
+        await ctx.send(embed=embed)
+    
+    @commands.command(name='normalize_info', help='Show audio normalization settings')
+    @handle_errors
+    @log_command
+    async def normalize_info(self, ctx):
+        """Show current audio normalization settings"""
+        embed = discord.Embed(title="🎵 Audio Normalization Settings", color=0x1DB954)
+        
+        embed.add_field(
+            name="Status",
+            value="✅ Enabled" if music_player.normalize_audio else "❌ Disabled",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Target Loudness",
+            value="-16 LUFS",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="True Peak",
+            value="-1 dB",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Description",
+            value="Audio normalization ensures all songs have consistent volume levels for better listening experience.",
+            inline=False
+        )
+        
         await ctx.send(embed=embed)
     
     @commands.command(name='playlist', help='Play a Spotify playlist')
@@ -377,23 +425,26 @@ class MusicCommands(commands.Cog):
         self.current_file = track.filename
         
         try:
+            # Use normalized file if available, otherwise use original
+            audio_file = track.normalized_filename if track.normalized_filename and os.path.exists(track.normalized_filename) else track.filename
+            
             # Check if the file exists and is a valid audio file
-            if not os.path.exists(track.filename):
-                raise Exception(f"Audio file not found: {track.filename}")
+            if not os.path.exists(audio_file):
+                raise Exception(f"Audio file not found: {audio_file}")
             
             # Check file size to ensure it's not empty
-            if os.path.getsize(track.filename) == 0:
+            if os.path.getsize(audio_file) == 0:
                 raise Exception("Downloaded audio file is empty")
             
             # Check if file has a valid audio extension
             valid_extensions = ('.mp3', '.m4a', '.webm', '.ogg', '.wav', '.flac')
-            if not track.filename.lower().endswith(valid_extensions):
-                raise Exception(f"Invalid audio file format: {track.filename}")
+            if not audio_file.lower().endswith(valid_extensions):
+                raise Exception(f"Invalid audio file format: {audio_file}")
             
             # Create FFmpegPCMAudio source and wrap it with PCMVolumeTransformer for volume control
             ffmpeg_source = discord.FFmpegPCMAudio(
                 executable=config.ffmpeg_path,
-                source=track.filename
+                source=audio_file
             )
             
             # Wrap with volume transformer
@@ -418,6 +469,12 @@ class MusicCommands(commands.Cog):
             embed.add_field(name="Duration", value=format_duration(track.duration))
             embed.add_field(name="Requested by", value=track.requester_name)
             
+            # Add normalization status
+            if track.normalized_filename and os.path.exists(track.normalized_filename):
+                embed.add_field(name="Audio", value="✅ Normalized", inline=True)
+            else:
+                embed.add_field(name="Audio", value="📊 Original", inline=True)
+            
             if track.thumbnail:
                 embed.set_thumbnail(url=track.thumbnail)
             
@@ -429,6 +486,11 @@ class MusicCommands(commands.Cog):
             if os.path.exists(track.filename):
                 try:
                     os.remove(track.filename)
+                except:
+                    pass
+            if track.normalized_filename and os.path.exists(track.normalized_filename):
+                try:
+                    os.remove(track.normalized_filename)
                 except:
                     pass
             

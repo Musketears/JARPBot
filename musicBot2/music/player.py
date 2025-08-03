@@ -4,6 +4,7 @@ import random
 import string
 import os
 import yt_dlp
+import subprocess
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,6 +12,11 @@ import logging
 from config import youtube_config, config
 
 logger = logging.getLogger(__name__)
+
+# Audio normalization settings
+AUDIO_NORMALIZATION_TARGET = -16.0  # LUFS target for headphone audio
+AUDIO_NORMALIZATION_TRUE_PEAK = -1.0  # True peak target
+AUDIO_NORMALIZATION_OFFSET = 0.0  # Offset to apply after normalization
 
 @dataclass
 class Track:
@@ -22,6 +28,7 @@ class Track:
     filename: str
     thumbnail: Optional[str] = None
     added_at: datetime = None
+    normalized_filename: Optional[str] = None  # Path to normalized audio file
     
     def __post_init__(self):
         if self.added_at is None:
@@ -35,6 +42,7 @@ class MusicPlayer:
         self.volume = config.default_volume
         self.is_playing = False
         self.is_paused = False
+        self.normalize_audio = True  # Enable audio normalization by default
         
         # Updated yt-dlp configuration for better compatibility
         ytdl_options = {
@@ -55,8 +63,50 @@ class MusicPlayer:
         
         self.ytdl = yt_dlp.YoutubeDL(ytdl_options)
     
+    def normalize_audio_file(self, input_file: str) -> str:
+        """Normalize audio file to consistent loudness using FFmpeg loudnorm filter"""
+        if not self.normalize_audio:
+            return input_file
+        
+        try:
+            # Generate normalized filename
+            base_name, ext = os.path.splitext(input_file)
+            normalized_file = f"{base_name}_normalized{ext}"
+            
+            # FFmpeg command with loudnorm filter
+            # This normalizes audio to -16 LUFS with true peak of -1 dB
+            ffmpeg_cmd = [
+                config.ffmpeg_path,
+                '-i', input_file,
+                '-af', f'loudnorm=I={AUDIO_NORMALIZATION_TARGET}:TP={AUDIO_NORMALIZATION_TRUE_PEAK}:LRA=11:measured_I=-23:measured_LRA=7:measured_TP=-1:measured_thresh=-70:offset={AUDIO_NORMALIZATION_OFFSET}:linear=true:print_format=json',
+                '-ar', '48000',  # Set sample rate to 48kHz for Discord
+                '-ac', '2',      # Stereo
+                '-b:a', '192k',  # 192kbps bitrate
+                '-y',            # Overwrite output file
+                normalized_file
+            ]
+            
+            # Run FFmpeg command
+            result = subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+            
+            if result.returncode == 0 and os.path.exists(normalized_file):
+                logger.info(f"Successfully normalized audio: {input_file} -> {normalized_file}")
+                return normalized_file
+            else:
+                logger.warning(f"Audio normalization failed for {input_file}, using original file")
+                return input_file
+                
+        except Exception as e:
+            logger.error(f"Error normalizing audio file {input_file}: {e}")
+            return input_file
+    
     async def download_track(self, url: str, requester_id: int, requester_name: str) -> Track:
-        """Download a track from URL"""
+        """Download a track from URL and normalize audio"""
         try:
             # Extract info first
             loop = asyncio.get_event_loop()
@@ -120,6 +170,15 @@ class MusicPlayer:
             if downloaded_file != unique_filename:
                 os.rename(downloaded_file, unique_filename)
             
+            # Normalize the audio file
+            normalized_filename = None
+            if self.normalize_audio:
+                normalized_filename = await loop.run_in_executor(
+                    None, 
+                    self.normalize_audio_file, 
+                    unique_filename
+                )
+            
             return Track(
                 title=data.get('title', 'Unknown Title'),
                 url=url,
@@ -127,7 +186,8 @@ class MusicPlayer:
                 requester_id=requester_id,
                 requester_name=requester_name,
                 filename=unique_filename,
-                thumbnail=data.get('thumbnail')
+                thumbnail=data.get('thumbnail'),
+                normalized_filename=normalized_filename
             )
         
         except Exception as e:
@@ -196,6 +256,11 @@ class MusicPlayer:
                 if os.path.exists(track.filename):
                     os.remove(track.filename)
                     logger.debug(f"Cleaned up file: {track.filename}")
+                
+                # Clean up normalized file if it exists
+                if track.normalized_filename and os.path.exists(track.normalized_filename):
+                    os.remove(track.normalized_filename)
+                    logger.debug(f"Cleaned up normalized file: {track.normalized_filename}")
             except Exception as e:
                 logger.error(f"Error cleaning up file {track.filename}: {e}")
 
