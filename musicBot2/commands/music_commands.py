@@ -269,11 +269,18 @@ class MusicCommands(commands.Cog):
         embed = create_success_embed("Cleared the queue")
         await ctx.send(embed=embed)
     
-    @commands.command(name='volume', help='Set the volume (0-100)')
+    @commands.command(name='volume', help='Set the volume (0-100) or show current volume')
     @handle_errors
     @log_command
-    async def volume(self, ctx, volume: int):
-        """Set the music volume"""
+    async def volume(self, ctx, volume: Optional[int] = None):
+        """Set the music volume or show current volume"""
+        if volume is None:
+            # Show current volume
+            current_volume = int(music_player.volume * 100)
+            embed = create_info_embed("Current Volume", f"The current volume is **{current_volume}%**")
+            await ctx.send(embed=embed)
+            return
+        
         if not 0 <= volume <= 100:
             embed = create_error_embed("Volume must be between 0 and 100.")
             await ctx.send(embed=embed)
@@ -282,8 +289,12 @@ class MusicCommands(commands.Cog):
         music_player.volume = volume / 100
         voice_client = ctx.guild.voice_client
         
+        # Update volume on current source if it's a PCMVolumeTransformer
         if voice_client and voice_client.source:
-            voice_client.source.volume = music_player.volume
+            if isinstance(voice_client.source, discord.PCMVolumeTransformer):
+                voice_client.source.volume = music_player.volume
+            elif hasattr(voice_client.source, 'volume'):
+                voice_client.source.volume = music_player.volume
         
         embed = create_success_embed(f"Volume set to {volume}%")
         await ctx.send(embed=embed)
@@ -379,19 +390,22 @@ class MusicCommands(commands.Cog):
             if not track.filename.lower().endswith(valid_extensions):
                 raise Exception(f"Invalid audio file format: {track.filename}")
             
+            # Create FFmpegPCMAudio source and wrap it with PCMVolumeTransformer for volume control
+            ffmpeg_source = discord.FFmpegPCMAudio(
+                executable=config.ffmpeg_path,
+                source=track.filename
+            )
+            
+            # Wrap with volume transformer
+            volume_source = discord.PCMVolumeTransformer(ffmpeg_source)
+            volume_source.volume = music_player.volume
+            
             voice_client.play(
-                discord.FFmpegPCMAudio(
-                    executable=config.ffmpeg_path,
-                    source=track.filename
-                ),
+                volume_source,
                 after=lambda e: asyncio.run_coroutine_threadsafe(
                     self._play_next(ctx), self.bot.loop
                 )
             )
-            
-            # Set volume
-            if voice_client.source:
-                voice_client.source.volume = music_player.volume
             
             music_player.current_track = track
             music_player.is_playing = True
