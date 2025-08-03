@@ -470,6 +470,17 @@ class MusicCommands(commands.Cog):
             if not audio_file.lower().endswith(valid_extensions):
                 raise Exception(f"Invalid audio file format: {audio_file}")
             
+            # Record the song play in the database
+            try:
+                await db.record_song_play(
+                    user_id=str(track.requester_id),
+                    song_title=track.title,
+                    song_artist="YouTube",  # Default since we don't have artist info from YouTube
+                    song_url=track.url
+                )
+            except Exception as e:
+                logger.error(f"Failed to record song play: {e}")
+            
             # Create FFmpegPCMAudio source and wrap it with PCMVolumeTransformer for volume control
             ffmpeg_source = discord.FFmpegPCMAudio(
                 executable=config.ffmpeg_path,
@@ -550,6 +561,186 @@ class MusicCommands(commands.Cog):
             music_player.is_playing = False
             music_player.current_track = None
             embed = create_info_embed("Queue Empty", "No more tracks in the queue.")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='mystats', help='Show your music listening statistics')
+    @handle_errors
+    @log_command
+    async def mystats(self, ctx):
+        """Show user's music listening statistics"""
+        user_id = str(ctx.author.id)
+        
+        try:
+            # Get user's song statistics
+            user_stats = await db.get_user_song_stats(user_id)
+            favorites = await db.get_user_favorite_songs(user_id, limit=5)
+            recent_history = await db.get_user_song_history(user_id, limit=5)
+            
+            embed = discord.Embed(
+                title="🎵 Your Music Stats",
+                description=f"Statistics for {ctx.author.display_name}",
+                color=0x1DB954
+            )
+            
+            # Add statistics fields
+            embed.add_field(
+                name="📊 Total Plays", 
+                value=f"{user_stats['total_plays']} songs", 
+                inline=True
+            )
+            embed.add_field(
+                name="🎼 Unique Songs", 
+                value=f"{user_stats['unique_songs']} different tracks", 
+                inline=True
+            )
+            embed.add_field(
+                name="📅 Today's Plays", 
+                value=f"{user_stats['today_plays']} songs", 
+                inline=True
+            )
+            
+            # Add favorite songs
+            if favorites:
+                favorites_text = "\n".join([
+                    f"**{i+1}.** {song['song_title']} ({song['play_count']} plays)"
+                    for i, song in enumerate(favorites)
+                ])
+                embed.add_field(
+                    name="❤️ Your Favorites",
+                    value=favorites_text,
+                    inline=False
+                )
+            
+            # Add recent plays
+            if recent_history:
+                recent_text = "\n".join([
+                    f"**{i+1}.** {song['song_title']}"
+                    for i, song in enumerate(recent_history)
+                ])
+                embed.add_field(
+                    name="🕒 Recent Plays",
+                    value=recent_text,
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error getting user stats: {e}")
+            embed = create_error_embed("Error retrieving your music statistics.")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='topcharts', help='Show the most played songs')
+    @handle_errors
+    @log_command
+    async def topcharts(self, ctx, limit: int = 10):
+        """Show the most played songs"""
+        if limit > 20:
+            limit = 20  # Cap at 20 to prevent spam
+        
+        try:
+            top_songs = await db.get_song_stats(limit=limit)
+            
+            if not top_songs:
+                embed = create_info_embed("No Songs Played", "No songs have been played yet!")
+                await ctx.send(embed=embed)
+                return
+            
+            embed = discord.Embed(
+                title="🏆 Top Charts",
+                description=f"Most played songs (Top {len(top_songs)})",
+                color=0x1DB954
+            )
+            
+            for i, song in enumerate(top_songs):
+                embed.add_field(
+                    name=f"#{i+1} {song['song_title']}",
+                    value=f"🎵 {song['play_count']} plays\n👤 {song['song_artist']}",
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error getting top charts: {e}")
+            embed = create_error_embed("Error retrieving top charts.")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='recentplays', help='Show recent song plays')
+    @handle_errors
+    @log_command
+    async def recentplays(self, ctx, hours: int = 24):
+        """Show recent song plays within the specified hours"""
+        if hours > 168:  # Cap at 1 week
+            hours = 168
+        
+        try:
+            recent_plays = await db.get_recent_song_plays(hours=hours, limit=15)
+            
+            if not recent_plays:
+                embed = create_info_embed("No Recent Plays", f"No songs played in the last {hours} hours.")
+                await ctx.send(embed=embed)
+                return
+            
+            embed = discord.Embed(
+                title="🕒 Recent Plays",
+                description=f"Songs played in the last {hours} hours",
+                color=0x1DB954
+            )
+            
+            for i, play in enumerate(recent_plays):
+                embed.add_field(
+                    name=f"{i+1}. {play['song_title']}",
+                    value=f"👤 {play['song_artist']}\n🎵 Requested by <@{play['user_id']}>",
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error getting recent plays: {e}")
+            embed = create_error_embed("Error retrieving recent plays.")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='songstats', help='Show overall music statistics')
+    @handle_errors
+    @log_command
+    async def songstats(self, ctx):
+        """Show overall music statistics"""
+        try:
+            total_plays = await db.get_total_songs_played()
+            unique_songs = await db.get_unique_songs_count()
+            
+            embed = discord.Embed(
+                title="📊 Music Statistics",
+                description="Overall music bot usage statistics",
+                color=0x1DB954
+            )
+            
+            embed.add_field(
+                name="🎵 Total Plays",
+                value=f"{total_plays} songs played",
+                inline=True
+            )
+            embed.add_field(
+                name="🎼 Unique Songs",
+                value=f"{unique_songs} different tracks",
+                inline=True
+            )
+            
+            if total_plays > 0:
+                avg_plays_per_song = total_plays / unique_songs
+                embed.add_field(
+                    name="📈 Average Plays per Song",
+                    value=f"{avg_plays_per_song:.1f} plays",
+                    inline=True
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error getting song stats: {e}")
+            embed = create_error_embed("Error retrieving music statistics.")
             await ctx.send(embed=embed)
 
 async def setup(bot):

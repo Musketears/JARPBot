@@ -66,10 +66,38 @@ class DatabaseManager:
                 )
             """)
             
+            # New tables for song tracking
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS song_plays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT,
+                    song_title TEXT,
+                    song_artist TEXT,
+                    song_url TEXT,
+                    played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES user_balances (user_id)
+                )
+            """)
+            
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS song_stats (
+                    song_title TEXT,
+                    song_artist TEXT,
+                    song_url TEXT,
+                    play_count INTEGER DEFAULT 0,
+                    first_played TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_played TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (song_title, song_artist)
+                )
+            """)
+            
             # Create indexes for better performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_gacha_user_id ON gacha_inventory(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_gambling_user_id ON gambling_history(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_gambling_date ON gambling_history(played_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_song_plays_user_id ON song_plays(user_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_song_plays_song ON song_plays(song_title, song_artist)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_song_plays_date ON song_plays(played_at)")
     
     async def get_balance(self, user_id: str) -> int:
         """Get user balance asynchronously"""
@@ -267,6 +295,214 @@ class DatabaseManager:
                 }
         
         return await asyncio.to_thread(_get_stats)
+    
+    async def record_song_play(self, user_id: str, song_title: str, song_artist: str, song_url: str = None):
+        """Record a song play by a user"""
+        def _record_song_play():
+            with sqlite3.connect(self.db_path) as conn:
+                # Record the individual play
+                conn.execute(
+                    "INSERT INTO song_plays (user_id, song_title, song_artist, song_url) VALUES (?, ?, ?, ?)",
+                    (user_id, song_title, song_artist, song_url)
+                )
+                
+                # Update song statistics
+                conn.execute(
+                    """
+                    INSERT INTO song_stats (song_title, song_artist, song_url, play_count, first_played, last_played) 
+                    VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT(song_title, song_artist) DO UPDATE SET 
+                    play_count = play_count + 1,
+                    last_played = CURRENT_TIMESTAMP
+                    """,
+                    (song_title, song_artist, song_url)
+                )
+        
+        await asyncio.to_thread(_record_song_play)
+    
+    async def get_user_song_history(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get a user's song play history"""
+        def _get_user_history():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT song_title, song_artist, song_url, played_at 
+                    FROM song_plays 
+                    WHERE user_id = ? 
+                    ORDER BY played_at DESC 
+                    LIMIT ?
+                    """,
+                    (user_id, limit)
+                )
+                return [
+                    {
+                        'song_title': row[0],
+                        'song_artist': row[1],
+                        'song_url': row[2],
+                        'played_at': row[3]
+                    }
+                    for row in cursor.fetchall()
+                ]
+        
+        return await asyncio.to_thread(_get_user_history)
+    
+    async def get_song_stats(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get overall song statistics, ordered by play count"""
+        def _get_song_stats():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT song_title, song_artist, song_url, play_count, first_played, last_played
+                    FROM song_stats 
+                    ORDER BY play_count DESC 
+                    LIMIT ?
+                    """,
+                    (limit,)
+                )
+                return [
+                    {
+                        'song_title': row[0],
+                        'song_artist': row[1],
+                        'song_url': row[2],
+                        'play_count': row[3],
+                        'first_played': row[4],
+                        'last_played': row[5]
+                    }
+                    for row in cursor.fetchall()
+                ]
+        
+        return await asyncio.to_thread(_get_song_stats)
+    
+    async def get_user_favorite_songs(self, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get a user's most played songs"""
+        def _get_favorites():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT song_title, song_artist, song_url, COUNT(*) as play_count
+                    FROM song_plays 
+                    WHERE user_id = ? 
+                    GROUP BY song_title, song_artist 
+                    ORDER BY play_count DESC 
+                    LIMIT ?
+                    """,
+                    (user_id, limit)
+                )
+                return [
+                    {
+                        'song_title': row[0],
+                        'song_artist': row[1],
+                        'song_url': row[2],
+                        'play_count': row[3]
+                    }
+                    for row in cursor.fetchall()
+                ]
+        
+        return await asyncio.to_thread(_get_favorites)
+    
+    async def get_recent_song_plays(self, hours: int = 24, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get recent song plays within the specified hours"""
+        def _get_recent_plays():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT sp.song_title, sp.song_artist, sp.song_url, sp.user_id, sp.played_at
+                    FROM song_plays sp
+                    WHERE sp.played_at >= datetime('now', '-{} hours')
+                    ORDER BY sp.played_at DESC 
+                    LIMIT ?
+                    """.format(hours),
+                    (limit,)
+                )
+                return [
+                    {
+                        'song_title': row[0],
+                        'song_artist': row[1],
+                        'song_url': row[2],
+                        'user_id': row[3],
+                        'played_at': row[4]
+                    }
+                    for row in cursor.fetchall()
+                ]
+        
+        return await asyncio.to_thread(_get_recent_plays)
+    
+    async def get_song_play_count(self, song_title: str, song_artist: str) -> int:
+        """Get the total play count for a specific song"""
+        def _get_play_count():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT play_count FROM song_stats WHERE song_title = ? AND song_artist = ?",
+                    (song_title, song_artist)
+                )
+                result = cursor.fetchone()
+                return result[0] if result else 0
+        
+        return await asyncio.to_thread(_get_play_count)
+    
+    async def get_user_play_count(self, user_id: str) -> int:
+        """Get total number of songs played by a user"""
+        def _get_user_play_count():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM song_plays WHERE user_id = ?",
+                    (user_id,)
+                )
+                return cursor.fetchone()[0]
+        
+        return await asyncio.to_thread(_get_user_play_count)
+    
+    async def get_total_songs_played(self) -> int:
+        """Get total number of songs played across all users"""
+        def _get_total_plays():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM song_plays")
+                return cursor.fetchone()[0]
+        
+        return await asyncio.to_thread(_get_total_plays)
+    
+    async def get_unique_songs_count(self) -> int:
+        """Get total number of unique songs played"""
+        def _get_unique_songs():
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM song_stats")
+                return cursor.fetchone()[0]
+        
+        return await asyncio.to_thread(_get_unique_songs)
+    
+    async def get_user_song_stats(self, user_id: str) -> Dict[str, Any]:
+        """Get comprehensive song statistics for a user"""
+        def _get_user_song_stats():
+            with sqlite3.connect(self.db_path) as conn:
+                # Total plays
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM song_plays WHERE user_id = ?",
+                    (user_id,)
+                )
+                total_plays = cursor.fetchone()[0]
+                
+                # Unique songs played
+                cursor = conn.execute(
+                    "SELECT COUNT(DISTINCT song_title || ' - ' || song_artist) FROM song_plays WHERE user_id = ?",
+                    (user_id,)
+                )
+                unique_songs = cursor.fetchone()[0]
+                
+                # Today's plays
+                today = datetime.now().strftime('%Y-%m-%d')
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM song_plays WHERE user_id = ? AND DATE(played_at) = ?",
+                    (user_id, today)
+                )
+                today_plays = cursor.fetchone()[0]
+                
+                return {
+                    'total_plays': total_plays,
+                    'unique_songs': unique_songs,
+                    'today_plays': today_plays
+                }
+        
+        return await asyncio.to_thread(_get_user_song_stats)
 
 # Global database instance
 db = DatabaseManager() 
