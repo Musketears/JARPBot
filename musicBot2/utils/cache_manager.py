@@ -81,49 +81,108 @@ class CacheManager:
             return None
     
     async def add_to_cache(self, youtube_id: str, title: str, duration: int, 
-                          original_file: str, normalized_file: str = None) -> bool:
-        """Add a song to the cache"""
+                          original_file: str, normalized_file: str = None) -> Dict[str, str]:
+        """Add a song to the cache and return the cached file paths"""
         if not config.cache_enabled:
-            return False
+            return {'success': False}
         
         try:
-            # Move files to cache directories
+            # Check if already cached to avoid race conditions
+            existing_cache = await db.get_cached_song(youtube_id)
+            if existing_cache:
+                logger.info(f"Song already cached: {title}")
+                return {
+                    'success': True,
+                    'audio_file': os.path.join(self.audio_dir, existing_cache['filename']),
+                    'normalized_file': os.path.join(self.normalized_dir, existing_cache['normalized_filename']) if existing_cache['normalized_filename'] else None
+                }
+            
+            # Move files to cache directories with atomic operations
             filename = os.path.basename(original_file)
             cached_audio_file = os.path.join(self.audio_dir, filename)
             
-            # Move original file to cache
+            # Use atomic move operation
             if os.path.exists(original_file):
-                os.rename(original_file, cached_audio_file)
+                # Create a temporary file first to avoid race conditions
+                temp_audio_file = f"{cached_audio_file}.tmp"
+                os.rename(original_file, temp_audio_file)
+                
+                # Now move to final location
+                if os.path.exists(cached_audio_file):
+                    # If file already exists, remove the temp file
+                    os.remove(temp_audio_file)
+                    logger.warning(f"Cache file already exists: {cached_audio_file}")
+                else:
+                    os.rename(temp_audio_file, cached_audio_file)
+                
                 file_size = os.path.getsize(cached_audio_file)
             else:
                 logger.error(f"Original file not found: {original_file}")
-                return False
+                return {'success': False}
             
-            # Handle normalized file
+            # Handle normalized file with atomic operations
             cached_normalized_file = None
             normalized_filename = None
             if normalized_file and os.path.exists(normalized_file):
                 normalized_filename = os.path.basename(normalized_file)
                 cached_normalized_file = os.path.join(self.normalized_dir, normalized_filename)
-                os.rename(normalized_file, cached_normalized_file)
+                
+                # Use atomic move for normalized file too
+                temp_normalized_file = f"{cached_normalized_file}.tmp"
+                os.rename(normalized_file, temp_normalized_file)
+                
+                if os.path.exists(cached_normalized_file):
+                    os.remove(temp_normalized_file)
+                    logger.warning(f"Normalized cache file already exists: {cached_normalized_file}")
+                else:
+                    os.rename(temp_normalized_file, cached_normalized_file)
+                
                 file_size += os.path.getsize(cached_normalized_file)
             
-            # Add to database
-            await db.add_cached_song(
-                youtube_id=youtube_id,
-                title=title,
-                duration=duration,
-                filename=filename,
-                normalized_filename=normalized_filename,
-                file_size=file_size
-            )
+            # Add to database with retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    await db.add_cached_song(
+                        youtube_id=youtube_id,
+                        title=title,
+                        duration=duration,
+                        filename=filename,
+                        normalized_filename=normalized_filename,
+                        file_size=file_size
+                    )
+                    break
+                except Exception as db_error:
+                    if attempt == max_retries - 1:
+                        logger.error(f"Failed to add to database after {max_retries} attempts: {db_error}")
+                        # Clean up files if database operation fails
+                        if os.path.exists(cached_audio_file):
+                            os.remove(cached_audio_file)
+                        if cached_normalized_file and os.path.exists(cached_normalized_file):
+                            os.remove(cached_normalized_file)
+                        return {'success': False}
+                    else:
+                        logger.warning(f"Database operation failed, retrying... ({attempt + 1}/{max_retries})")
+                        await asyncio.sleep(0.1 * (attempt + 1))  # Exponential backoff
             
             logger.info(f"Added to cache: {title} (ID: {youtube_id})")
-            return True
+            return {
+                'success': True,
+                'audio_file': cached_audio_file,
+                'normalized_file': cached_normalized_file
+            }
             
         except Exception as e:
             logger.error(f"Error adding to cache: {e}")
-            return False
+            # Clean up any partially created files
+            try:
+                if 'cached_audio_file' in locals() and os.path.exists(cached_audio_file):
+                    os.remove(cached_audio_file)
+                if 'cached_normalized_file' in locals() and cached_normalized_file and os.path.exists(cached_normalized_file):
+                    os.remove(cached_normalized_file)
+            except Exception as cleanup_error:
+                logger.error(f"Error cleaning up cache files: {cleanup_error}")
+            return {'success': False}
     
     async def cleanup_cache(self) -> Dict[str, Any]:
         """Clean up cache based on size and age limits"""

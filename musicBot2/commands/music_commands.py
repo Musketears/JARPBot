@@ -18,6 +18,9 @@ from config import config
 
 logger = logging.getLogger(__name__)
 
+# Global lock to prevent multiple commands from processing simultaneously
+_global_processing_lock = asyncio.Lock()
+
 class MusicCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -97,33 +100,34 @@ class MusicCommands(commands.Cog):
             voice_client = ctx.guild.voice_client
         
         async with ctx.typing():
-            try:
-                # Search for the song
-                if validate_youtube_url(query):
-                    url = query
-                else:
-                    search_results = VideosSearch(query, limit=1).result()
-                    if not search_results or not search_results.get('result'):
-                        embed = create_error_embed("No results found for your search.")
+            async with _global_processing_lock:
+                try:
+                    # Search for the song
+                    if validate_youtube_url(query):
+                        url = query
+                    else:
+                        search_results = VideosSearch(query, limit=1).result()
+                        if not search_results or not search_results.get('result'):
+                            embed = create_error_embed("No results found for your search.")
+                            await ctx.send(embed=embed)
+                            return
+                        url = search_results['result'][0]['link']
+                    
+                    # Download and add to queue
+                    track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
+                    
+                    if voice_client.is_playing() or music_player.is_playing:
+                        music_player.add_track(track)
+                        embed = create_success_embed(f"Added **{track.title}** to the queue")
                         await ctx.send(embed=embed)
-                        return
-                    url = search_results['result'][0]['link']
+                    else:
+                        # Play immediately
+                        await self._play_track(ctx, track)
                 
-                # Download and add to queue
-                track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
-                
-                if voice_client.is_playing() or self.is_processing:
-                    music_player.add_track(track)
-                    embed = create_success_embed(f"Added **{track.title}** to the queue")
+                except Exception as e:
+                    logger.error(f"Error playing track: {e}")
+                    embed = create_error_embed(f"Error playing the song: {str(e)}")
                     await ctx.send(embed=embed)
-                else:
-                    # Play immediately
-                    await self._play_track(ctx, track)
-            
-            except Exception as e:
-                logger.error(f"Error playing track: {e}")
-                embed = create_error_embed(f"Error playing the song: {str(e)}")
-                await ctx.send(embed=embed)
     
     @commands.command(name='play_first', help='Add a song to the front of the queue')
     @handle_errors
@@ -136,29 +140,30 @@ class MusicCommands(commands.Cog):
             return
         
         async with ctx.typing():
-            try:
-                # Search for the song
-                if validate_youtube_url(query):
-                    url = query
-                else:
-                    search_results = VideosSearch(query, limit=1).result()
-                    if not search_results or not search_results.get('result'):
-                        embed = create_error_embed("No results found for your search.")
-                        await ctx.send(embed=embed)
-                        return
-                    url = search_results['result'][0]['link']
+            async with _global_processing_lock:
+                try:
+                    # Search for the song
+                    if validate_youtube_url(query):
+                        url = query
+                    else:
+                        search_results = VideosSearch(query, limit=1).result()
+                        if not search_results or not search_results.get('result'):
+                            embed = create_error_embed("No results found for your search.")
+                            await ctx.send(embed=embed)
+                            return
+                        url = search_results['result'][0]['link']
+                    
+                    # Download and add to front of queue
+                    track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
+                    music_player.add_track(track, position=0)
+                    
+                    embed = create_success_embed(f"Added **{track.title}** to the front of the queue")
+                    await ctx.send(embed=embed)
                 
-                # Download and add to front of queue
-                track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
-                music_player.add_track(track, position=0)
-                
-                embed = create_success_embed(f"Added **{track.title}** to the front of the queue")
-                await ctx.send(embed=embed)
-            
-            except Exception as e:
-                logger.error(f"Error adding track to front: {e}")
-                embed = create_error_embed(f"Error adding the song: {str(e)}")
-                await ctx.send(embed=embed)
+                except Exception as e:
+                    logger.error(f"Error adding track to front: {e}")
+                    embed = create_error_embed(f"Error adding the song: {str(e)}")
+                    await ctx.send(embed=embed)
     
     @commands.command(name='skip', help='Skip the current song')
     @handle_errors

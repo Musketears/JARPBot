@@ -562,15 +562,39 @@ class DatabaseManager:
         """Add a song to the cache"""
         def _add_cached_song():
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO audio_cache 
-                    (youtube_id, title, duration, filename, normalized_filename, file_size, 
-                     download_date, last_accessed, access_count)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
-                    """,
-                    (youtube_id, title, duration, filename, normalized_filename, file_size)
-                )
+                # Use a transaction to ensure atomicity
+                conn.execute("BEGIN TRANSACTION")
+                try:
+                    # Check if entry already exists to avoid race conditions
+                    cursor = conn.execute("SELECT youtube_id FROM audio_cache WHERE youtube_id = ?", (youtube_id,))
+                    if cursor.fetchone():
+                        # Entry already exists, update it instead
+                        conn.execute(
+                            """
+                            UPDATE audio_cache 
+                            SET title = ?, duration = ?, filename = ?, normalized_filename = ?, 
+                                file_size = ?, download_date = CURRENT_TIMESTAMP, 
+                                last_accessed = CURRENT_TIMESTAMP, access_count = access_count + 1
+                            WHERE youtube_id = ?
+                            """,
+                            (title, duration, filename, normalized_filename, file_size, youtube_id)
+                        )
+                    else:
+                        # Insert new entry
+                        conn.execute(
+                            """
+                            INSERT INTO audio_cache 
+                            (youtube_id, title, duration, filename, normalized_filename, file_size, 
+                             download_date, last_accessed, access_count)
+                            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)
+                            """,
+                            (youtube_id, title, duration, filename, normalized_filename, file_size)
+                        )
+                    
+                    conn.commit()
+                except Exception as e:
+                    conn.rollback()
+                    raise e
         
         await asyncio.to_thread(_add_cached_song)
     

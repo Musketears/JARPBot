@@ -15,6 +15,9 @@ from utils.database import db
 
 logger = logging.getLogger(__name__)
 
+# Global lock to prevent race conditions when downloading the same song
+_download_locks = {}
+
 # Audio normalization settings
 AUDIO_NORMALIZATION_TARGET = -16.0  # LUFS target for headphone audio
 AUDIO_NORMALIZATION_TRUE_PEAK = -1.0  # True peak target
@@ -109,118 +112,142 @@ class MusicPlayer:
     
     async def download_track(self, url: str, requester_id: int, requester_name: str) -> Track:
         """Download a track from URL and normalize audio"""
-        try:
-            # Check cache first
-            cached_song = await cache_manager.get_cached_song(url)
-            if cached_song:
-                logger.info(f"Using cached version of: {cached_song['title']}")
+        youtube_id = cache_manager.extract_youtube_id(url)
+        
+        # Create a lock for this specific YouTube ID to prevent race conditions
+        if youtube_id not in _download_locks:
+            _download_locks[youtube_id] = asyncio.Lock()
+        
+        async with _download_locks[youtube_id]:
+            try:
+                # Check cache first (double-check after acquiring lock)
+                cached_song = await cache_manager.get_cached_song(url)
+                if cached_song:
+                    logger.info(f"Using cached version of: {cached_song['title']}")
+                    return Track(
+                        title=cached_song['title'],
+                        url=url,
+                        duration=cached_song['duration'],
+                        requester_id=requester_id,
+                        requester_name=requester_name,
+                        filename=cached_song['audio_file'],
+                        thumbnail=None,  # We don't store thumbnails in cache
+                        normalized_filename=cached_song['normalized_file']
+                    )
+                
+                # Extract info first
+                loop = asyncio.get_event_loop()
+                data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False))
+                
+                if 'entries' in data:
+                    # Take first item from a playlist
+                    data = data['entries'][0]
+                
+                # Download the audio
+                download_data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=True))
+                
+                if 'entries' in download_data:
+                    download_data = download_data['entries'][0]
+                
+                # Generate expected filename
+                expected_filename = self.ytdl.prepare_filename(download_data)
+                
+                # Handle different file extensions
+                if not expected_filename.endswith(('.mp3', '.m4a', '.webm', '.ogg')):
+                    expected_filename = expected_filename.rsplit('.', 1)[0] + '.mp3'
+                
+                # Generate unique filename
+                filename, file_extension = os.path.splitext(expected_filename)
+                unique_filename = f"{filename}_{''.join(random.choices(string.ascii_letters + string.digits, k=8))}{file_extension}"
+                
+                # Look for the downloaded file with better detection
+                downloaded_file = None
+                
+                # First check if the expected file exists
+                if os.path.exists(expected_filename):
+                    downloaded_file = expected_filename
+                else:
+                    # Search for files with similar names in current directory
+                    base_name = expected_filename.rsplit('.', 1)[0]
+                    for file in os.listdir('.'):
+                        if (file.startswith(base_name) and 
+                            file.endswith(('.mp3', '.m4a', '.webm', '.ogg')) and
+                            os.path.isfile(file)):
+                            downloaded_file = file
+                            break
+                    
+                    # If still not found, look for any recently created audio files
+                    if downloaded_file is None:
+                        current_time = datetime.now()
+                        for file in os.listdir('.'):
+                            if (file.endswith(('.mp3', '.m4a', '.webm', '.ogg')) and 
+                                os.path.isfile(file)):
+                                try:
+                                    file_time = datetime.fromtimestamp(os.path.getctime(file))
+                                    if (current_time - file_time).total_seconds() < 60:  # File created in last minute
+                                        downloaded_file = file
+                                        break
+                                except:
+                                    continue
+                
+                if downloaded_file is None:
+                    raise Exception("Downloaded audio file not found")
+                
+                # Rename to unique filename
+                if downloaded_file != unique_filename:
+                    os.rename(downloaded_file, unique_filename)
+                
+                # Normalize the audio file
+                normalized_filename = None
+                if self.normalize_audio:
+                    normalized_filename = await loop.run_in_executor(
+                        None, 
+                        self.normalize_audio_file, 
+                        unique_filename
+                    )
+                
+                # Add to cache with error handling
+                if youtube_id:
+                    try:
+                        cache_result = await cache_manager.add_to_cache(
+                            youtube_id=youtube_id,
+                            title=data.get('title', 'Unknown Title'),
+                            duration=data.get('duration', 0),
+                            original_file=unique_filename,
+                            normalized_file=normalized_filename
+                        )
+                        
+                        # If successfully cached, update the file paths to point to cache
+                        if cache_result['success']:
+                            # Update filename to point to cached location
+                            unique_filename = cache_result['audio_file']
+                            
+                            # Update normalized filename to point to cached location
+                            if cache_result['normalized_file']:
+                                normalized_filename = cache_result['normalized_file']
+                        
+                    except Exception as cache_error:
+                        logger.error(f"Failed to add to cache: {cache_error}")
+                        # Continue without caching rather than failing the entire download
+                
                 return Track(
-                    title=cached_song['title'],
+                    title=data.get('title', 'Unknown Title'),
                     url=url,
-                    duration=cached_song['duration'],
+                    duration=data.get('duration', 0),
                     requester_id=requester_id,
                     requester_name=requester_name,
-                    filename=cached_song['audio_file'],
-                    thumbnail=None,  # We don't store thumbnails in cache
-                    normalized_filename=cached_song['normalized_file']
+                    filename=unique_filename,
+                    thumbnail=data.get('thumbnail'),
+                    normalized_filename=normalized_filename
                 )
             
-            # Extract info first
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False))
-            
-            if 'entries' in data:
-                # Take first item from a playlist
-                data = data['entries'][0]
-            
-            # Download the audio
-            download_data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=True))
-            
-            if 'entries' in download_data:
-                download_data = download_data['entries'][0]
-            
-            # Generate expected filename
-            expected_filename = self.ytdl.prepare_filename(download_data)
-            
-            # Handle different file extensions
-            if not expected_filename.endswith(('.mp3', '.m4a', '.webm', '.ogg')):
-                expected_filename = expected_filename.rsplit('.', 1)[0] + '.mp3'
-            
-            # Generate unique filename
-            filename, file_extension = os.path.splitext(expected_filename)
-            unique_filename = f"{filename}_{''.join(random.choices(string.ascii_letters + string.digits, k=8))}{file_extension}"
-            
-            # Look for the downloaded file with better detection
-            downloaded_file = None
-            
-            # First check if the expected file exists
-            if os.path.exists(expected_filename):
-                downloaded_file = expected_filename
-            else:
-                # Search for files with similar names in current directory
-                base_name = expected_filename.rsplit('.', 1)[0]
-                for file in os.listdir('.'):
-                    if (file.startswith(base_name) and 
-                        file.endswith(('.mp3', '.m4a', '.webm', '.ogg')) and
-                        os.path.isfile(file)):
-                        downloaded_file = file
-                        break
-                
-                # If still not found, look for any recently created audio files
-                if downloaded_file is None:
-                    current_time = datetime.now()
-                    for file in os.listdir('.'):
-                        if (file.endswith(('.mp3', '.m4a', '.webm', '.ogg')) and 
-                            os.path.isfile(file)):
-                            try:
-                                file_time = datetime.fromtimestamp(os.path.getctime(file))
-                                if (current_time - file_time).total_seconds() < 60:  # File created in last minute
-                                    downloaded_file = file
-                                    break
-                            except:
-                                continue
-            
-            if downloaded_file is None:
-                raise Exception("Downloaded audio file not found")
-            
-            # Rename to unique filename
-            if downloaded_file != unique_filename:
-                os.rename(downloaded_file, unique_filename)
-            
-            # Normalize the audio file
-            normalized_filename = None
-            if self.normalize_audio:
-                normalized_filename = await loop.run_in_executor(
-                    None, 
-                    self.normalize_audio_file, 
-                    unique_filename
-                )
-            
-            # Add to cache
-            youtube_id = cache_manager.extract_youtube_id(url)
-            if youtube_id:
-                await cache_manager.add_to_cache(
-                    youtube_id=youtube_id,
-                    title=data.get('title', 'Unknown Title'),
-                    duration=data.get('duration', 0),
-                    original_file=unique_filename,
-                    normalized_file=normalized_filename
-                )
-            
-            return Track(
-                title=data.get('title', 'Unknown Title'),
-                url=url,
-                duration=data.get('duration', 0),
-                requester_id=requester_id,
-                requester_name=requester_name,
-                filename=unique_filename,
-                thumbnail=data.get('thumbnail'),
-                normalized_filename=normalized_filename
-            )
-        
-        except Exception as e:
-            logger.error(f"Error downloading track {url}: {e}")
-            raise
+            except Exception as e:
+                logger.error(f"Error downloading track {url}: {e}")
+                raise
+            finally:
+                # Clean up the lock if it's no longer needed
+                if youtube_id in _download_locks:
+                    del _download_locks[youtube_id]
     
     def add_track(self, track: Track, position: Optional[int] = None):
         """Add track to queue"""
