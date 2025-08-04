@@ -97,24 +97,30 @@ class CacheManager:
                     'normalized_file': os.path.join(self.normalized_dir, existing_cache['normalized_filename']) if existing_cache['normalized_filename'] else None
                 }
             
-            # Move files to cache directories with atomic operations
+            # Generate consistent filenames based on YouTube ID
             filename = os.path.basename(original_file)
             cached_audio_file = os.path.join(self.audio_dir, filename)
             
-            # Use atomic move operation
-            if os.path.exists(original_file):
-                # Create a temporary file first to avoid race conditions
-                temp_audio_file = f"{cached_audio_file}.tmp"
-                os.rename(original_file, temp_audio_file)
-                
-                # Now move to final location
-                if os.path.exists(cached_audio_file):
-                    # If file already exists, remove the temp file
-                    os.remove(temp_audio_file)
-                    logger.warning(f"Cache file already exists: {cached_audio_file}")
+            # Check if the cache file already exists (another process might have created it)
+            if os.path.exists(cached_audio_file):
+                logger.info(f"Cache file already exists: {cached_audio_file}")
+                # Try to get the existing cache entry
+                existing_cache = await db.get_cached_song(youtube_id)
+                if existing_cache:
+                    return {
+                        'success': True,
+                        'audio_file': cached_audio_file,
+                        'normalized_file': os.path.join(self.normalized_dir, existing_cache['normalized_filename']) if existing_cache['normalized_filename'] else None
+                    }
                 else:
-                    os.rename(temp_audio_file, cached_audio_file)
-                
+                    # File exists but no database entry, remove the file and continue
+                    os.remove(cached_audio_file)
+                    logger.warning(f"Removed orphaned cache file: {cached_audio_file}")
+            
+            # Move files to cache directories with atomic operations
+            if os.path.exists(original_file):
+                # Use atomic move operation
+                os.rename(original_file, cached_audio_file)
                 file_size = os.path.getsize(cached_audio_file)
             else:
                 logger.error(f"Original file not found: {original_file}")
@@ -127,15 +133,15 @@ class CacheManager:
                 normalized_filename = os.path.basename(normalized_file)
                 cached_normalized_file = os.path.join(self.normalized_dir, normalized_filename)
                 
-                # Use atomic move for normalized file too
-                temp_normalized_file = f"{cached_normalized_file}.tmp"
-                os.rename(normalized_file, temp_normalized_file)
-                
+                # Check if normalized cache file already exists
                 if os.path.exists(cached_normalized_file):
-                    os.remove(temp_normalized_file)
-                    logger.warning(f"Normalized cache file already exists: {cached_normalized_file}")
+                    logger.info(f"Normalized cache file already exists: {cached_normalized_file}")
+                    # Remove the duplicate normalized file
+                    os.remove(normalized_file)
+                    logger.warning(f"Removed duplicate normalized file: {normalized_file}")
                 else:
-                    os.rename(temp_normalized_file, cached_normalized_file)
+                    # Use atomic move for normalized file
+                    os.rename(normalized_file, cached_normalized_file)
                 
                 file_size += os.path.getsize(cached_normalized_file)
             

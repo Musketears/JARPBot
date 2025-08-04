@@ -461,19 +461,34 @@ class MusicCommands(commands.Cog):
             
         except Exception as e:
             logger.error(f"Error playing track: {e}")
-            # Clean up the problematic file
+            # Clean up the problematic file (only if not cached)
             if os.path.exists(track.filename):
-                try:
-                    os.remove(track.filename)
-                    logger.debug(f"Cleaned up file: {track.filename}")
-                except Exception as cleanup_error:
-                    logger.error(f"Error cleaning up file {track.filename}: {cleanup_error}")
+                # Check if this is a cached file
+                cache_audio_dir = os.path.join("cache", "audio")
+                is_cached = track.filename.startswith(cache_audio_dir)
+                
+                if not is_cached:
+                    try:
+                        os.remove(track.filename)
+                        logger.debug(f"Cleaned up file: {track.filename}")
+                    except Exception as cleanup_error:
+                        logger.error(f"Error cleaning up file {track.filename}: {cleanup_error}")
+                else:
+                    logger.debug(f"Skipped cleanup of cached file: {track.filename}")
+                    
             if track.normalized_filename and os.path.exists(track.normalized_filename):
-                try:
-                    os.remove(track.normalized_filename)
-                    logger.debug(f"Cleaned up normalized file: {track.normalized_filename}")
-                except Exception as cleanup_error:
-                    logger.error(f"Error cleaning up normalized file {track.normalized_filename}: {cleanup_error}")
+                # Check if this is a cached normalized file
+                cache_normalized_dir = os.path.join("cache", "normalized")
+                is_cached_normalized = track.normalized_filename.startswith(cache_normalized_dir)
+                
+                if not is_cached_normalized:
+                    try:
+                        os.remove(track.normalized_filename)
+                        logger.debug(f"Cleaned up normalized file: {track.normalized_filename}")
+                    except Exception as cleanup_error:
+                        logger.error(f"Error cleaning up normalized file {track.normalized_filename}: {cleanup_error}")
+                else:
+                    logger.debug(f"Skipped cleanup of cached normalized file: {track.normalized_filename}")
             
             embed = create_error_embed(f"Error playing track: {str(e)}")
             await ctx.send(embed=embed)
@@ -485,13 +500,23 @@ class MusicCommands(commands.Cog):
         # Clean up current track files
         music_player.cleanup_current_track()
         
-        # Clean up any remaining files
+        # Clean up any remaining files (only if they're not cached)
         if self.current_file and os.path.exists(self.current_file):
-            try:
-                os.remove(self.current_file)
-                logger.debug(f"Cleaned up file: {self.current_file}")
-            except Exception as e:
-                logger.error(f"Error cleaning up file {self.current_file}: {e}")
+            # Check if this is a cached file
+            cache_audio_dir = os.path.join("cache", "audio")
+            cache_normalized_dir = os.path.join("cache", "normalized")
+            
+            is_cached = (self.current_file.startswith(cache_audio_dir) or 
+                        self.current_file.startswith(cache_normalized_dir))
+            
+            if not is_cached:
+                try:
+                    os.remove(self.current_file)
+                    logger.debug(f"Cleaned up file: {self.current_file}")
+                except Exception as e:
+                    logger.error(f"Error cleaning up file {self.current_file}: {e}")
+            else:
+                logger.debug(f"Skipped cleanup of cached file: {self.current_file}")
         
         if music_player.queue:
             next_track = music_player.queue.pop(0)

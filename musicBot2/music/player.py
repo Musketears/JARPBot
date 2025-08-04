@@ -120,10 +120,25 @@ class MusicPlayer:
         
         async with _download_locks[youtube_id]:
             try:
-                # Check cache first (double-check after acquiring lock)
+                # Check cache first BEFORE any download starts
                 cached_song = await cache_manager.get_cached_song(url)
                 if cached_song:
                     logger.info(f"Using cached version of: {cached_song['title']}")
+                    return Track(
+                        title=cached_song['title'],
+                        url=url,
+                        duration=cached_song['duration'],
+                        requester_id=requester_id,
+                        requester_name=requester_name,
+                        filename=cached_song['audio_file'],
+                        thumbnail=None,  # We don't store thumbnails in cache
+                        normalized_filename=cached_song['normalized_file']
+                    )
+                
+                # Double-check cache after acquiring lock to handle race conditions
+                cached_song = await cache_manager.get_cached_song(url)
+                if cached_song:
+                    logger.info(f"Using cached version of: {cached_song['title']} (double-check)")
                     return Track(
                         title=cached_song['title'],
                         url=url,
@@ -156,9 +171,14 @@ class MusicPlayer:
                 if not expected_filename.endswith(('.mp3', '.m4a', '.webm', '.ogg')):
                     expected_filename = expected_filename.rsplit('.', 1)[0] + '.mp3'
                 
-                # Generate unique filename
+                # Generate unique filename using YouTube ID to ensure consistency
                 filename, file_extension = os.path.splitext(expected_filename)
-                unique_filename = f"{filename}_{''.join(random.choices(string.ascii_letters + string.digits, k=8))}{file_extension}"
+                if youtube_id:
+                    # Use YouTube ID in filename to ensure consistency across downloads
+                    unique_filename = f"{filename}_{youtube_id}{file_extension}"
+                else:
+                    # Fallback to random suffix if no YouTube ID
+                    unique_filename = f"{filename}_{''.join(random.choices(string.ascii_letters + string.digits, k=8))}{file_extension}"
                 
                 # Look for the downloaded file with better detection
                 downloaded_file = None
@@ -314,14 +334,19 @@ class MusicPlayer:
             try:
                 # Only clean up files that are not in cache
                 if os.path.exists(track.filename):
-                    # Check if this is a cached file
+                    # Check if this is a cached file by checking if it's in the cache directory
                     is_cached = False
-                    if hasattr(track, 'url'):
-                        youtube_id = cache_manager.extract_youtube_id(track.url)
-                        if youtube_id:
-                            cached_info = await db.get_cached_song(youtube_id)
-                            if cached_info and cached_info['filename'] == os.path.basename(track.filename):
-                                is_cached = True
+                    cache_audio_dir = os.path.join("cache", "audio")
+                    if track.filename.startswith(cache_audio_dir):
+                        is_cached = True
+                    else:
+                        # Also check database for cached entries
+                        if hasattr(track, 'url'):
+                            youtube_id = cache_manager.extract_youtube_id(track.url)
+                            if youtube_id:
+                                cached_info = await db.get_cached_song(youtube_id)
+                                if cached_info:
+                                    is_cached = True
                     
                     if not is_cached:
                         os.remove(track.filename)
@@ -333,12 +358,17 @@ class MusicPlayer:
                 if track.normalized_filename and os.path.exists(track.normalized_filename):
                     # Check if this is a cached normalized file
                     is_cached_normalized = False
-                    if hasattr(track, 'url'):
-                        youtube_id = cache_manager.extract_youtube_id(track.url)
-                        if youtube_id:
-                            cached_info = await db.get_cached_song(youtube_id)
-                            if cached_info and cached_info['normalized_filename'] == os.path.basename(track.normalized_filename):
-                                is_cached_normalized = True
+                    cache_normalized_dir = os.path.join("cache", "normalized")
+                    if track.normalized_filename.startswith(cache_normalized_dir):
+                        is_cached_normalized = True
+                    else:
+                        # Also check database for cached entries
+                        if hasattr(track, 'url'):
+                            youtube_id = cache_manager.extract_youtube_id(track.url)
+                            if youtube_id:
+                                cached_info = await db.get_cached_song(youtube_id)
+                                if cached_info and cached_info.get('normalized_filename'):
+                                    is_cached_normalized = True
                     
                     if not is_cached_normalized:
                         os.remove(track.normalized_filename)
@@ -351,9 +381,21 @@ class MusicPlayer:
     def cleanup_current_track(self):
         """Clean up files for the current track"""
         if self.current_track:
-            asyncio.create_task(self.cleanup_files([self.current_track]))
+            # Only clean up if the track is not cached
+            cache_audio_dir = os.path.join("cache", "audio")
+            cache_normalized_dir = os.path.join("cache", "normalized")
+            
+            is_cached = (self.current_track.filename.startswith(cache_audio_dir) or 
+                        (self.current_track.normalized_filename and 
+                         self.current_track.normalized_filename.startswith(cache_normalized_dir)))
+            
+            if not is_cached:
+                asyncio.create_task(self.cleanup_files([self.current_track]))
+                logger.info("Current track files cleaned up")
+            else:
+                logger.info("Skipped cleanup of cached current track")
+            
             self.current_track = None
-            logger.info("Current track files cleaned up")
     
     def cleanup_orphaned_files(self):
         """Clean up any orphaned audio files in the current directory"""
