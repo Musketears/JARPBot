@@ -101,6 +101,7 @@ async def load_extensions():
     extensions = [
         'utils.error_handler',  # Load error handler first
         'commands.music_commands',
+        'commands.playlist_commands',
         'commands.game_commands',
     ]
     

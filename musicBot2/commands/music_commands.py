@@ -5,8 +5,6 @@ import re
 from typing import Optional
 import logging
 from youtubesearchpython import VideosSearch
-import requests
-import base64
 import os
 
 from music.player import music_player, YTDLSource
@@ -382,72 +380,7 @@ class MusicCommands(commands.Cog):
             embed = create_error_embed(f"Error during cleanup: {str(e)}")
             await ctx.send(embed=embed)
     
-    @commands.command(name='playlist', help='Play a Spotify playlist')
-    @handle_errors
-    @log_command
-    async def playlist(self, ctx, playlist_url: str):
-        """Play a Spotify playlist"""
-        if not ctx.author.voice:
-            embed = create_error_embed("You are not connected to a voice channel.")
-            await ctx.send(embed=embed)
-            return
-        
-        # Extract playlist ID
-        playlist_uri = playlist_url.split("/")[-1].split("?")[0]
-        
-        try:
-            # Get Spotify access token
-            auth_url = 'https://accounts.spotify.com/api/token'
-            auth_headers = {
-                'Authorization': 'Basic ' + base64.b64encode(
-                    (config.spotify_client_id + ":" + config.spotify_client_secret).encode()
-                ).decode("ascii")
-            }
-            auth_body = {'grant_type': 'client_credentials'}
-            
-            auth_response = requests.post(auth_url, data=auth_body, headers=auth_headers)
-            access_token = auth_response.json()['access_token']
-            
-            # Get playlist tracks
-            playlist_url = f'https://api.spotify.com/v1/playlists/{playlist_uri}/tracks?fields=items(track(name,artists(name)))'
-            playlist_headers = {'Authorization': f'Bearer {access_token}'}
-            
-            playlist_response = requests.get(playlist_url, headers=playlist_headers)
-            tracks = playlist_response.json()['items']
-            
-            # Convert to search queries
-            search_queries = []
-            for item in tracks:
-                track_name = item['track']['name']
-                artists = ', '.join([artist['name'] for artist in item['track']['artists']])
-                search_queries.append(f"{track_name} by {artists}")
-            
-            # Shuffle and add to queue
-            import random
-            random.shuffle(search_queries)
-            
-            embed = create_success_embed(f"Adding {len(search_queries)} tracks from Spotify playlist to queue...")
-            await ctx.send(embed=embed)
-            
-            # Add tracks to queue
-            for query in search_queries[:20]:  # Limit to 20 tracks
-                try:
-                    search_results = VideosSearch(query, limit=1).result()
-                    if search_results and search_results.get('result'):
-                        url = search_results['result'][0]['link']
-                        track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
-                        music_player.add_track(track)
-                except Exception as e:
-                    logger.error(f"Error adding track from playlist: {e}")
-                    continue
-            
-            embed = create_success_embed(f"Added {len(search_queries[:20])} tracks to the queue!")
-            await ctx.send(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error processing Spotify playlist: {e}")
-            embed = create_error_embed(f"Error processing Spotify playlist: {str(e)}")
-            await ctx.send(embed=embed)
+
     
     async def _play_track(self, ctx, track):
         """Play a track"""
