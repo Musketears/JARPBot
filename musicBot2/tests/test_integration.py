@@ -271,8 +271,7 @@ class TestSystemCompatibility(unittest.TestCase):
         """Test configuration compatibility"""
         # Test that all required config values exist
         required_attrs = [
-            'token', 'spotify_client_id', 'spotify_client_secret',
-            'command_prefix', 'default_balance', 'gacha_cost',
+            'token', 'command_prefix', 'default_balance', 'gacha_cost',
             'max_daily_bet', 'gambling_cooldown', 'max_queue_size',
             'max_volume', 'default_volume', 'person_pool', 'adjectives_pool'
         ]

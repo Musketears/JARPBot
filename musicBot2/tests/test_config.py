@@ -18,17 +18,13 @@ class TestBotConfig(unittest.TestCase):
     def setUp(self):
         """Set up test environment"""
         self.test_config = BotConfig(
-            token="test_token",
-            spotify_client_id="test_client_id",
-            spotify_client_secret="test_client_secret"
+            token="test_token"
         )
     
     def test_config_initialization(self):
         """Test config initialization with default values"""
         self.assertEqual(self.test_config.token, "test_token")
-        self.assertEqual(self.test_config.spotify_client_id, "test_client_id")
-        self.assertEqual(self.test_config.spotify_client_secret, "test_client_secret")
-        self.assertEqual(self.test_config.command_prefix, "!")
+        self.assertEqual(self.test_config.command_prefix, "?")
         self.assertEqual(self.test_config.default_balance, 100)
         self.assertEqual(self.test_config.gacha_cost, 10)
         self.assertEqual(self.test_config.max_daily_bet, 1000)
@@ -57,8 +53,6 @@ class TestBotConfig(unittest.TestCase):
         custom_pool = ["Test1", "Test2"]
         config_with_custom = BotConfig(
             token="test",
-            spotify_client_id="test",
-            spotify_client_secret="test",
             person_pool=custom_pool
         )
         self.assertEqual(config_with_custom.person_pool, custom_pool)
@@ -68,23 +62,17 @@ class TestBotConfig(unittest.TestCase):
         custom_adjectives = ["Test1", "Test2"]
         config_with_custom = BotConfig(
             token="test",
-            spotify_client_id="test",
-            spotify_client_secret="test",
             adjectives_pool=custom_adjectives
         )
         self.assertEqual(config_with_custom.adjectives_pool, custom_adjectives)
     
     @patch.dict(os.environ, {
-        'DISCORD_TOKEN': 'env_test_token',
-        'SPOTIFY_CLIENT_ID': 'env_test_client_id',
-        'SPOTIFY_CLIENT_SECRET': 'env_test_client_secret'
+        'DISCORD_TOKEN': 'env_test_token'
     })
     def test_from_env(self):
         """Test creating config from environment variables"""
         env_config = BotConfig.from_env()
         self.assertEqual(env_config.token, 'env_test_token')
-        self.assertEqual(env_config.spotify_client_id, 'env_test_client_id')
-        self.assertEqual(env_config.spotify_client_secret, 'env_test_client_secret')
 
 class TestYouTubeConfig(unittest.TestCase):
     """Test YouTubeConfig class"""

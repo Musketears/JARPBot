@@ -94,7 +94,7 @@ def test_config():
     
     from config import config
     
-    required_fields = ['token', 'spotify_client_id', 'spotify_client_secret']
+    required_fields = ['token']
     for field in required_fields:
         if hasattr(config, field) and getattr(config, field):
             print(f"OK {field} is configured")
