@@ -594,6 +594,115 @@ class MusicCommands(commands.Cog):
             embed = create_error_embed("Error retrieving your music statistics.")
             await ctx.send(embed=embed)
     
+    @commands.command(name='userstats', help='Show another user\'s music listening statistics')
+    @handle_errors
+    @log_command
+    async def userstats(self, ctx, member: discord.Member):
+        """Show another user's music listening statistics"""
+        user_id = str(member.id)
+        
+        try:
+            # Get user's song statistics
+            user_stats = await db.get_user_song_stats(user_id)
+            favorites = await db.get_user_favorite_songs(user_id, limit=5)
+            recent_history = await db.get_user_song_history(user_id, limit=5)
+            
+            embed = discord.Embed(
+                title="🎵 User Music Stats",
+                description=f"Statistics for {member.display_name}",
+                color=0x1DB954
+            )
+            
+            # Add statistics fields
+            embed.add_field(
+                name="📊 Total Plays", 
+                value=f"{user_stats['total_plays']} songs", 
+                inline=True
+            )
+            embed.add_field(
+                name="🎼 Unique Songs", 
+                value=f"{user_stats['unique_songs']} different tracks", 
+                inline=True
+            )
+            embed.add_field(
+                name="📅 Today's Plays", 
+                value=f"{user_stats['today_plays']} songs", 
+                inline=True
+            )
+            
+            # Add favorite songs
+            if favorites:
+                favorites_text = "\n".join([
+                    f"**{i+1}.** {song['song_title']} ({song['play_count']} plays)"
+                    for i, song in enumerate(favorites)
+                ])
+                embed.add_field(
+                    name="❤️ Their Favorites",
+                    value=favorites_text,
+                    inline=False
+                )
+            
+            # Add recent plays
+            if recent_history:
+                recent_text = "\n".join([
+                    f"**{i+1}.** {song['song_title']}"
+                    for i, song in enumerate(recent_history)
+                ])
+                embed.add_field(
+                    name="🕒 Recent Plays",
+                    value=recent_text,
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error getting user stats: {e}")
+            embed = create_error_embed("Error retrieving user music statistics.")
+            await ctx.send(embed=embed)
+    
+    @commands.command(name='usertopsongs', help='Show another user\'s top songs')
+    @handle_errors
+    @log_command
+    async def usertopsongs(self, ctx, member: discord.Member, limit: int = 10):
+        """Show another user's top songs"""
+        if limit > 20:
+            limit = 20  # Cap at 20 to prevent spam
+        
+        user_id = str(member.id)
+        
+        try:
+            # Get user's favorite songs
+            favorites = await db.get_user_favorite_songs(user_id, limit=limit)
+            
+            if not favorites:
+                embed = create_info_embed(
+                    "No Songs Found", 
+                    f"{member.display_name} hasn't played any songs yet!"
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            embed = discord.Embed(
+                title=f"🎵 {member.display_name}'s Top Songs",
+                description=f"Most played songs by {member.display_name} (Top {len(favorites)})",
+                color=0x1DB954
+            )
+            
+            for i, song in enumerate(favorites):
+                embed.add_field(
+                    name=f"#{i+1} {song['song_title']}",
+                    value=f"🎵 {song['play_count']} plays\n👤 {song['song_artist']}",
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Error getting user top songs: {e}")
+            embed = create_error_embed("Error retrieving user's top songs.")
+            await ctx.send(embed=embed)
+    
     @commands.command(name='topcharts', help='Show the most played songs')
     @handle_errors
     @log_command
