@@ -104,7 +104,7 @@ python main.py
 #### Bot Management (Admin Only)
 - `!update` - Update and restart the bot by pulling from GitHub
 - `!restart` - Restart the bot without updating
-- `!status` - Show detailed bot system status (CPU, memory, disk usage)
+- `!system_status` - Show detailed bot system status (CPU, memory, disk usage)
 
 **Permissions Required**: Administrator role or bot owner
 - `!logstats [hours]` - Show logging statistics (default: 24 hours)

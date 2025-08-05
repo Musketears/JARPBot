@@ -103,6 +103,20 @@ class TestAdminCommands(unittest.TestCase):
         self.ctx.send.assert_called()
         call_args = self.ctx.send.call_args[0][0]
         self.assertIn("Permission Denied", call_args.title)
+    
+    def test_system_status_permissions(self):
+        """Test system_status command permissions"""
+        # Mock no permissions
+        self.ctx.author.guild_permissions.administrator = False
+        self.ctx.author.id = 987654321
+        
+        # Test the command
+        asyncio.run(self.cog.system_status(self.ctx))
+        
+        # Verify send was called with permission denied
+        self.ctx.send.assert_called()
+        call_args = self.ctx.send.call_args[0][0]
+        self.assertIn("Permission Denied", call_args.title)
 
 if __name__ == '__main__':
     unittest.main() 
