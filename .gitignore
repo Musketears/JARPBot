@@ -2,6 +2,8 @@
 user_balances.json
 *.webm
 *.csv
+*.m4a
+*.db
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
