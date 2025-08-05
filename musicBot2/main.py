@@ -119,7 +119,7 @@ async def update_status():
     try:
         # Get a random guild member for status
         if bot.guilds:
-            guild = bot.guilds[0]  # Use first guild
+            guild = bot.guilds[3]  # Use first guild
             members = [member for member in guild.members if not member.bot]
             if members:
                 random_member = random.choice(members)
