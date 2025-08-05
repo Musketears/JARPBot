@@ -87,7 +87,8 @@ def run_unit_tests():
         'test_database', 
         'test_helpers',
         'test_gambling',
-        'test_gacha'
+        'test_gacha',
+        'test_logging_commands'
     ]
     
     all_passed = True

@@ -26,6 +26,7 @@ A feature-rich Discord music bot with advanced audio processing, intelligent cac
 - **Magic 8-Ball**: Classic fortune-telling command
 - **Griddy System**: Custom image generation
 - **Comprehensive Logging**: Detailed error handling and performance monitoring
+- **Logging Commands**: Advanced log management and debugging tools
 
 ## 🚀 Quick Start
 
@@ -91,6 +92,35 @@ python main.py
 - `?topcharts [limit]` - Show most played songs
 - `?recentplays [hours]` - Show recent plays
 - `?songstats` - Show overall statistics
+
+### Logging Commands
+
+#### Viewing and Managing Logs
+- `!logs [lines] [level]` - View recent bot logs (default: 50 lines)
+- `!searchlogs <term> [lines]` - Search logs for specific text
+- `!logstats [hours]` - Show logging statistics (default: 24 hours)
+- `!exportlogs [lines] [level]` - Export logs to downloadable file
+
+#### Log Configuration
+- `!loglevel <level>` - Set bot log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+- `!loginfo` - Show current logging configuration
+- `!loghelp` - Show detailed help for logging commands
+
+#### Log Maintenance
+- `!clearlogs` - Clear the log file (creates backup)
+- `!logbackup` - Create a backup of the current log file
+
+#### Examples
+```bash
+!logs 100                    # View last 100 log lines
+!logs 50 ERROR              # View last 50 ERROR level logs
+!searchlogs error 200       # Search for 'error' in last 200 lines
+!loglevel DEBUG             # Set log level to DEBUG
+!logstats 48                # Show stats for last 48 hours
+!exportlogs 500 ERROR       # Export last 500 ERROR logs
+```
+
+**Note**: Logging commands require "Manage Server" permission or bot owner status.
 
 ### Playlist Commands
 
