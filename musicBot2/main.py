@@ -104,6 +104,7 @@ async def load_extensions():
         'commands.playlist_commands',
         'commands.game_commands',
         'commands.logging_commands',
+        'commands.admin_commands',
     ]
     
     for extension in extensions:
