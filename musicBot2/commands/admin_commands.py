@@ -49,7 +49,7 @@ class AdminCommands(commands.Cog):
         
         try:
             # Get the script path
-            script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'update_and_restart.sh')
+            script_path = 'update_and_restart.sh'
             
             # Check if script exists
             if not os.path.exists(script_path):
@@ -66,38 +66,9 @@ class AdminCommands(commands.Cog):
             await message.edit(embed=embed)
             
             # Run the update script
-            result = subprocess.run(
-                [script_path],
-                capture_output=True,
-                text=True,
-                timeout=60  # 60 second timeout
+            subprocess.run(
+                ['bash',script_path],
             )
-            
-            if result.returncode == 0:
-                embed = discord.Embed(
-                    title="✅ Update Complete",
-                    description="Bot has been successfully updated and restarted!",
-                    color=0x57F287
-                )
-                embed.add_field(
-                    name="Output",
-                    value=f"```{result.stdout[-1000:]}```" if result.stdout else "No output",
-                    inline=False
-                )
-            else:
-                embed = discord.Embed(
-                    title="❌ Update Failed",
-                    description="Failed to update the bot. Check the logs for details.",
-                    color=0xE02B2B
-                )
-                if result.stderr:
-                    embed.add_field(
-                        name="Error",
-                        value=f"```{result.stderr[-1000:]}```",
-                        inline=False
-                    )
-            
-            await message.edit(embed=embed)
             
         except subprocess.TimeoutExpired:
             embed = discord.Embed(
@@ -112,62 +83,6 @@ class AdminCommands(commands.Cog):
             embed = discord.Embed(
                 title="❌ Error",
                 description=f"An error occurred during the update: {str(e)}",
-                color=0xE02B2B
-            )
-            await message.edit(embed=embed)
-    
-    @commands.command(name='restart', help='Restart the bot (admin only)')
-    async def restart_bot(self, ctx):
-        """Restart the bot without updating"""
-        # Check permissions
-        if not await self._check_admin_permissions(ctx):
-            embed = discord.Embed(
-                title="❌ Permission Denied",
-                description="You need administrator permissions or be the bot owner to use this command.",
-                color=0xE02B2B
-            )
-            await ctx.send(embed=embed)
-            return
-        
-        # Send initial response
-        embed = discord.Embed(
-            title="🔄 Bot Restart",
-            description="Restarting the bot...",
-            color=0x57F287
-        )
-        message = await ctx.send(embed=embed)
-        
-        try:
-            # Get the script directory
-            script_dir = os.path.dirname(os.path.dirname(__file__))
-            
-            # Kill existing bot processes
-            subprocess.run(['pkill', '-f', 'python.*main.py'], capture_output=True)
-            subprocess.run(['pkill', '-f', 'python.*musicBot2'], capture_output=True)
-            
-            # Wait a moment
-            await asyncio.sleep(2)
-            
-            # Start the bot in the background
-            subprocess.Popen(
-                ['python3', 'main.py'],
-                cwd=script_dir,
-                stdout=open(os.path.join(script_dir, 'bot.log'), 'a'),
-                stderr=subprocess.STDOUT
-            )
-            
-            embed = discord.Embed(
-                title="✅ Restart Complete",
-                description="Bot has been restarted successfully!",
-                color=0x57F287
-            )
-            await message.edit(embed=embed)
-            
-        except Exception as e:
-            logger.error(f"Error during bot restart: {e}")
-            embed = discord.Embed(
-                title="❌ Error",
-                description=f"An error occurred during the restart: {str(e)}",
                 color=0xE02B2B
             )
             await message.edit(embed=embed)

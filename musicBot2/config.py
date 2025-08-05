@@ -36,7 +36,7 @@ def get_ffmpeg_path():
 @dataclass
 class BotConfig:
     token: str
-    command_prefix: str = "!"
+    command_prefix: str = "?"
     default_balance: int = 100
     ffmpeg_path: str = None
     

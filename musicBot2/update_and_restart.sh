@@ -16,6 +16,7 @@ echo -e "${BLUE}🔄 Starting bot update and restart process...${NC}"
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "$SCRIPT_DIR"
 cd "$SCRIPT_DIR"
 
 # Check if we're in a git repository
@@ -37,8 +38,7 @@ fi
 
 # Kill existing bot processes
 echo -e "${YELLOW}🔄 Stopping existing bot processes...${NC}"
-pkill -f "python.*main.py" || true
-pkill -f "python.*musicBot2" || true
+ps -ef | grep main.py | grep -v "grep" | awk '{print $2}' | xargs kill -9
 
 # Wait a moment for processes to stop
 sleep 2
@@ -65,7 +65,7 @@ fi
 
 # Start the bot in the background
 echo -e "${YELLOW}🚀 Starting bot...${NC}"
-nohup python3 main.py > bot.log 2>&1 &
+nohup python main.py > bot.log 2>&1 &
 BOT_PID=$!
 
 # Wait a moment and check if the bot started successfully
