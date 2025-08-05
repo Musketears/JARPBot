@@ -60,7 +60,7 @@ Restarts the bot without pulling any updates from GitHub.
 Bot has been restarted successfully!
 ```
 
-### `!status`
+### `!system_status`
 **Permission Required**: Administrator role or bot owner
 
 Shows detailed system status including CPU, memory, and disk usage.
@@ -73,7 +73,7 @@ Shows detailed system status including CPU, memory, and disk usage.
 
 **Usage:**
 ```
-!status
+!system_status
 ```
 
 **Example Response:**

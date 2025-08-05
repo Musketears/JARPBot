@@ -172,8 +172,8 @@ class AdminCommands(commands.Cog):
             )
             await message.edit(embed=embed)
     
-    @commands.command(name='status', help='Show bot system status (admin only)')
-    async def bot_status(self, ctx):
+    @commands.command(name='system_status', help='Show bot system status (admin only)')
+    async def system_status(self, ctx):
         """Show detailed bot system status"""
         # Check permissions
         if not await self._check_admin_permissions(ctx):
