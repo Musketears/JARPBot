@@ -98,6 +98,15 @@ python main.py
 #### Viewing and Managing Logs
 - `!logs [lines] [level]` - View recent bot logs (default: 50 lines)
 - `!searchlogs <term> [lines]` - Search logs for specific text
+
+### Admin Commands
+
+#### Bot Management (Admin Only)
+- `!update` - Update and restart the bot by pulling from GitHub
+- `!restart` - Restart the bot without updating
+- `!status` - Show detailed bot system status (CPU, memory, disk usage)
+
+**Permissions Required**: Administrator role or bot owner
 - `!logstats [hours]` - Show logging statistics (default: 24 hours)
 - `!exportlogs [lines] [level]` - Export logs to downloadable file
 
