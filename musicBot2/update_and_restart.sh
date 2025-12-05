@@ -25,18 +25,6 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# Check if there are any uncommitted changes
-if ! git diff-index --quiet HEAD --; then
-    echo -e "${YELLOW}⚠️  Warning: You have uncommitted changes. Consider committing them first.${NC}"
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${RED}❌ Update cancelled${NC}"
-        exit 1
-    fi
-fi
-
-# Kill existing bot processes
 echo -e "${YELLOW}🔄 Stopping existing bot processes...${NC}"
 ps -ef | grep main.py | grep -v "grep" | awk '{print $2}' | xargs kill -9
 
