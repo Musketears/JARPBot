@@ -12,7 +12,9 @@ from utils.database import db
 from utils.cache_manager import cache_manager
 from utils.error_handler import handle_errors, log_command
 from utils.helpers import validate_youtube_url, format_duration, create_success_embed, create_error_embed, create_info_embed
+from utils.wrapped_generator import generate_wrapped_image_async
 from config import config
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -973,6 +975,109 @@ class MusicCommands(commands.Cog):
             logger.error(f"Error setting up cache clear: {e}")
             embed = create_error_embed(f"Error setting up cache clear: {str(e)}")
             await ctx.send(embed=embed)
+    
+    @commands.command(name='wrapped', help='Generate a Spotify Wrapped-style image for a user')
+    @handle_errors
+    @log_command
+    async def wrapped(self, ctx, member: discord.Member = None):
+        """Generate a Spotify Wrapped-style image showing user's music stats"""
+        # Default to command author if no member specified
+        if member is None:
+            member = ctx.author
+        
+        user_id = str(member.id)
+        
+        # Send initial loading message
+        loading_embed = discord.Embed(
+            title="🎵 Generating Your Wrapped...",
+            description=f"Creating a personalized music summary for **{member.display_name}**...\n\n✨ *Crunching the numbers...*",
+            color=0x1DB954
+        )
+        loading_msg = await ctx.send(embed=loading_embed)
+        
+        try:
+            # Get wrapped stats from database
+            stats = await db.get_user_wrapped_stats(user_id)
+            
+            # Check if user has any data
+            if stats['total_plays'] == 0:
+                embed = create_info_embed(
+                    "No Music Data",
+                    f"**{member.display_name}** hasn't played any songs yet!\n\n"
+                    "Start playing some music with `!play` to build up your wrapped stats! 🎵"
+                )
+                await loading_msg.edit(embed=embed)
+                return
+            
+            # Generate the wrapped image
+            image_buffer = await generate_wrapped_image_async(
+                user_name=member.display_name,
+                user_id=user_id,
+                avatar_url=str(member.display_avatar.url) if member.display_avatar else None,
+                stats=stats
+            )
+            
+            # Create Discord file from buffer
+            file = discord.File(image_buffer, filename=f"wrapped_{member.id}.png")
+            
+            # Create embed with the image
+            embed = discord.Embed(
+                title=f"🎵 {member.display_name}'s Music Wrapped",
+                description=f"**{stats['total_plays']:,}** songs played • **{stats['unique_songs']:,}** unique tracks",
+                color=0x1DB954
+            )
+            
+            # Add some text stats as fields
+            if stats['top_songs']:
+                top_song = stats['top_songs'][0]
+                embed.add_field(
+                    name="🏆 #1 Song",
+                    value=f"**{top_song['song_title'][:40]}**\n{top_song['play_count']} plays",
+                    inline=True
+                )
+            
+            if stats['favorite_hour'] is not None:
+                hour = stats['favorite_hour']
+                time_str = f"{hour}:00" if hour >= 10 else f"0{hour}:00"
+                period = "AM" if hour < 12 else "PM"
+                display_hour = hour if hour <= 12 else hour - 12
+                if display_hour == 0:
+                    display_hour = 12
+                embed.add_field(
+                    name="⏰ Peak Hour",
+                    value=f"**{display_hour}:00 {period}**\nYour most active time",
+                    inline=True
+                )
+            
+            if stats['days_with_music']:
+                embed.add_field(
+                    name="📅 Active Days",
+                    value=f"**{stats['days_with_music']}** days\nwith music",
+                    inline=True
+                )
+            
+            embed.set_image(url=f"attachment://wrapped_{member.id}.png")
+            embed.set_footer(text="Your personalized music journey • Powered by JARPbot")
+            
+            # Delete loading message and send the wrapped image
+            await loading_msg.delete()
+            await ctx.send(embed=embed, file=file)
+            
+        except Exception as e:
+            logger.error(f"Error generating wrapped for {member.display_name}: {e}")
+            embed = create_error_embed(
+                f"Error generating wrapped image.\n\n"
+                f"**Details:** {str(e)[:200]}\n\n"
+                f"Try again later or contact an admin if this persists."
+            )
+            await loading_msg.edit(embed=embed)
+    
+    @commands.command(name='mywrapped', help='Generate your personal Spotify Wrapped-style image')
+    @handle_errors
+    @log_command
+    async def mywrapped(self, ctx):
+        """Shortcut to generate your own wrapped image"""
+        await self.wrapped(ctx, ctx.author)
 
 async def setup(bot):
     await bot.add_cog(MusicCommands(bot)) 

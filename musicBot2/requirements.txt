@@ -9,3 +9,4 @@ aiohttp==3.9.1
 httpx==0.24.1
 httpcore==0.17.3
 psutil>=5.9.0
+Pillow>=10.0.0
