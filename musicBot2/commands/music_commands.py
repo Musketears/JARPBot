@@ -12,7 +12,7 @@ from utils.database import db
 from utils.cache_manager import cache_manager
 from utils.error_handler import handle_errors, log_command
 from utils.helpers import validate_youtube_url, format_duration, create_success_embed, create_error_embed, create_info_embed
-from utils.wrapped_generator import generate_wrapped_image_async
+from utils.wrapped_generator import generate_wrapped_image_async, convert_utc_hour_to_timezone, DEFAULT_TIMEZONE
 from config import config
 import io
 
@@ -1009,12 +1009,14 @@ class MusicCommands(commands.Cog):
                 await loading_msg.edit(embed=embed)
                 return
             
-            # Generate the wrapped image
+            # Generate the wrapped image (default to EST timezone)
+            user_timezone = DEFAULT_TIMEZONE  # Could be extended to allow user preference
             image_buffer = await generate_wrapped_image_async(
                 user_name=member.display_name,
                 user_id=user_id,
                 avatar_url=str(member.display_avatar.url) if member.display_avatar else None,
-                stats=stats
+                stats=stats,
+                timezone=user_timezone
             )
             
             # Create Discord file from buffer
@@ -1037,8 +1039,8 @@ class MusicCommands(commands.Cog):
                 )
             
             if stats['favorite_hour'] is not None:
-                hour = stats['favorite_hour']
-                time_str = f"{hour}:00" if hour >= 10 else f"0{hour}:00"
+                # Convert UTC hour to EST
+                hour = convert_utc_hour_to_timezone(stats['favorite_hour'], user_timezone)
                 period = "AM" if hour < 12 else "PM"
                 display_hour = hour if hour <= 12 else hour - 12
                 if display_hour == 0:
