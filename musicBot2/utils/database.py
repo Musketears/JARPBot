@@ -562,6 +562,136 @@ class DatabaseManager:
         
         return await asyncio.to_thread(_get_user_song_stats)
     
+    async def get_user_wrapped_stats(self, user_id: str) -> Dict[str, Any]:
+        """Get comprehensive wrapped statistics for a user"""
+        def _get_wrapped_stats():
+            with sqlite3.connect(self.db_path) as conn:
+                # Total plays
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM song_plays WHERE user_id = ?",
+                    (user_id,)
+                )
+                total_plays = cursor.fetchone()[0]
+                
+                # Unique songs played
+                cursor = conn.execute(
+                    "SELECT COUNT(DISTINCT song_title || ' - ' || song_artist) FROM song_plays WHERE user_id = ?",
+                    (user_id,)
+                )
+                unique_songs = cursor.fetchone()[0]
+                
+                # Top songs
+                cursor = conn.execute(
+                    """
+                    SELECT song_title, song_artist, COUNT(*) as play_count
+                    FROM song_plays 
+                    WHERE user_id = ? 
+                    GROUP BY song_title, song_artist 
+                    ORDER BY play_count DESC 
+                    LIMIT 10
+                    """,
+                    (user_id,)
+                )
+                top_songs = [
+                    {
+                        'song_title': row[0],
+                        'song_artist': row[1],
+                        'play_count': row[2]
+                    }
+                    for row in cursor.fetchall()
+                ]
+                
+                # First song ever played
+                cursor = conn.execute(
+                    """
+                    SELECT song_title, song_artist, played_at
+                    FROM song_plays 
+                    WHERE user_id = ? 
+                    ORDER BY played_at ASC 
+                    LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                first_song_row = cursor.fetchone()
+                first_song = None
+                if first_song_row:
+                    first_song = {
+                        'song_title': first_song_row[0],
+                        'song_artist': first_song_row[1],
+                        'played_at': first_song_row[2]
+                    }
+                
+                # Most active hour (0-23)
+                cursor = conn.execute(
+                    """
+                    SELECT strftime('%H', played_at) as hour, COUNT(*) as count
+                    FROM song_plays 
+                    WHERE user_id = ?
+                    GROUP BY hour
+                    ORDER BY count DESC
+                    LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                favorite_hour_row = cursor.fetchone()
+                favorite_hour = int(favorite_hour_row[0]) if favorite_hour_row else None
+                
+                # Days with music (listening streak potential)
+                cursor = conn.execute(
+                    """
+                    SELECT COUNT(DISTINCT DATE(played_at)) 
+                    FROM song_plays 
+                    WHERE user_id = ?
+                    """,
+                    (user_id,)
+                )
+                days_with_music = cursor.fetchone()[0]
+                
+                # Most played artist (from song_artist field)
+                cursor = conn.execute(
+                    """
+                    SELECT song_artist, COUNT(*) as play_count
+                    FROM song_plays 
+                    WHERE user_id = ? AND song_artist != 'YouTube'
+                    GROUP BY song_artist
+                    ORDER BY play_count DESC
+                    LIMIT 5
+                    """,
+                    (user_id,)
+                )
+                top_artists = [
+                    {
+                        'artist': row[0],
+                        'play_count': row[1]
+                    }
+                    for row in cursor.fetchall()
+                ]
+                
+                # Plays this year
+                current_year = datetime.now().year
+                cursor = conn.execute(
+                    """
+                    SELECT COUNT(*) 
+                    FROM song_plays 
+                    WHERE user_id = ? AND strftime('%Y', played_at) = ?
+                    """,
+                    (user_id, str(current_year))
+                )
+                plays_this_year = cursor.fetchone()[0]
+                
+                return {
+                    'total_plays': total_plays,
+                    'unique_songs': unique_songs,
+                    'top_songs': top_songs,
+                    'first_song': first_song,
+                    'favorite_hour': favorite_hour,
+                    'days_with_music': days_with_music,
+                    'top_artists': top_artists,
+                    'plays_this_year': plays_this_year
+                }
+        
+        return await asyncio.to_thread(_get_wrapped_stats)
+    
     async def get_cached_song(self, youtube_id: str) -> Optional[Dict[str, Any]]:
         """Get cached song information"""
         def _get_cached_song():
