@@ -26,45 +26,36 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
 fi
 
 echo -e "${YELLOW}🔄 Stopping existing bot processes...${NC}"
-ps -ef | grep main.py | grep -v "grep" | awk '{print $2}' | xargs kill -9
-
-# Wait a moment for processes to stop
-sleep 2
-
-# Pull latest changes from GitHub
-echo -e "${YELLOW}📥 Pulling latest changes from GitHub...${NC}"
-if git pull origin main; then
-    echo -e "${GREEN}✅ Successfully pulled latest changes${NC}"
+PIDS=$(pgrep -f "python.*main\.py" || true)
+if [[ -n "$PIDS" ]]; then
+  kill -9 $PIDS || true
+  sleep 2
 else
-    echo -e "${RED}❌ Failed to pull changes from GitHub${NC}"
-    exit 1
+  echo -e "${YELLOW}ℹ️  No existing bot process found.${NC}"
 fi
 
-# Check if requirements.txt has changed and update dependencies if needed
-if git diff --name-only HEAD~1 HEAD | grep -q "requirements.txt"; then
-    echo -e "${YELLOW}📦 Requirements.txt changed, updating dependencies...${NC}"
-    if command -v pip3 &> /dev/null; then
-        pip3 install -r requirements.txt
-        echo -e "${GREEN}✅ Dependencies updated${NC}"
-    else
-        echo -e "${YELLOW}⚠️  pip3 not found, skipping dependency update${NC}"
-    fi
+echo -e "${YELLOW}📥 Pulling latest changes from GitHub...${NC}"
+git pull origin main
+echo -e "${GREEN}✅ Successfully pulled latest changes${NC}"
+
+if git diff --name-only ORIG_HEAD HEAD | grep -q "^requirements\.txt$"; then
+  echo -e "${YELLOW}📦 requirements.txt changed, updating dependencies...${NC}"
+  "$SCRIPT_DIR/.venv/bin/pip" install -r requirements.txt
+  echo -e "${GREEN}✅ Dependencies updated${NC}"
 fi
 
-# Start the bot in the background
 echo -e "${YELLOW}🚀 Starting bot...${NC}"
-nohup python main.py > bot.log 2>&1 &
+PYTHON="$SCRIPT_DIR/.venv/bin/python"
+nohup "$PYTHON" main.py > bot.log 2>&1 &
 BOT_PID=$!
 
-# Wait a moment and check if the bot started successfully
 sleep 3
-if ps -p $BOT_PID > /dev/null; then
-    echo -e "${GREEN}✅ Bot started successfully (PID: $BOT_PID)${NC}"
-    echo -e "${BLUE}📝 Logs are being written to bot.log${NC}"
+if ps -p "$BOT_PID" > /dev/null 2>&1; then
+  echo -e "${GREEN}✅ Bot started successfully (PID: $BOT_PID)${NC}"
+  echo -e "${BLUE}📝 Logs are being written to bot.log${NC}"
 else
-    echo -e "${RED}❌ Failed to start bot${NC}"
-    echo -e "${YELLOW}📋 Check bot.log for error details${NC}"
-    exit 1
+  echo -e "${RED}❌ Failed to start bot${NC}"
+  echo -e "${YELLOW}📋 Check bot.log for error details${NC}"
+  tail -n 50 bot.log || true
+  exit 1
 fi
-
-echo -e "${GREEN}🎉 Bot update and restart completed successfully!${NC}" 
