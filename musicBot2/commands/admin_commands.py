@@ -152,7 +152,7 @@ class AdminCommands(commands.Cog):
             
             embed.add_field(
                 name="📈 Memory Details",
-                value=f"Total: {memory.total // (1024**3)}GB\nUsed: {memory.used // (1024**3)}GB\nAvailable: {memory.available // (1024**3)}GB",
+                value=f"Total: {memory.total // (1024*1024*100)}GB\nUsed: {memory.used // (1024*1024*100)}GB\nAvailable: {memory.available // (1024*1024*100)}GB",
                 inline=True
             )
             
