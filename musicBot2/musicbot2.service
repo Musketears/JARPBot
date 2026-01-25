@@ -1,0 +1,26 @@
+[Unit]
+Description=MusicBot2 Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ryan
+WorkingDirectory=/home/ryan/JARPBot/musicBot2
+EnvironmentFile=/home/ryan/JARPBot/musicBot2/.env
+ExecStart=/home/ryan/JARPBot/musicBot2/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Graceful shutdown
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target
