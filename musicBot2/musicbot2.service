@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ryan
+User=bot
 WorkingDirectory=/home/bot/JARPBot/musicBot2
 EnvironmentFile=/home/bot/JARPBot/musicBot2/.env
 ExecStart=/home/bot/JARPBot/musicBot2/.venv/bin/python main.py
