@@ -58,8 +58,8 @@ echo -e "${GREEN}✅ Updated to commit: ${NEW_COMMIT:0:8}${NC}"
 # Check if requirements.txt changed
 if git diff --name-only "$PREV_COMMIT" HEAD | grep -q "^requirements\.txt$"; then
     echo -e "${YELLOW}📦 requirements.txt changed, updating dependencies...${NC}"
-    if [[ -f "$SCRIPT_DIR/.venv/bin/pip" ]]; then
-        "$SCRIPT_DIR/.venv/bin/pip" install -r requirements.txt --quiet
+    if [[ -f "$SCRIPT_DIR/venv/bin/pip" ]]; then
+        "$SCRIPT_DIR/venv/bin/pip" install -r requirements.txt --quiet
         echo -e "${GREEN}✅ Dependencies updated${NC}"
     else
         echo -e "${YELLOW}⚠️  Virtual environment not found, skipping dependency update${NC}"
