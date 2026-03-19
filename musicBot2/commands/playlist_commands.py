@@ -39,69 +39,76 @@ class PlaylistCommands(commands.Cog):
                 embed = create_error_embed(f"Error creating playlist: {str(e)}")
             await ctx.send(embed=embed)
     
-    @commands.command(name='playlist_add', help='Add a song to a playlist')
+    @commands.command(name='playlist_add', help='Add one or more songs to a playlist (comma-separated)')
     @handle_errors
     @log_command
     async def playlist_add(self, ctx, playlist_id: int, *, query: str):
-        """Add a song to a playlist"""
+        """Add one or more songs to a playlist (comma-separated queries or URLs)"""
         user_id = str(ctx.author.id)
-        
+
         # Check if user owns the playlist
         playlist = await db.get_playlist(playlist_id)
         if not playlist:
             embed = create_error_embed("Playlist not found.")
             await ctx.send(embed=embed)
             return
-        
+
         if playlist['user_id'] != user_id:
             embed = create_error_embed("You can only add songs to your own playlists.")
             await ctx.send(embed=embed)
             return
-        
+
+        queries = [q.strip() for q in query.split(',') if q.strip()]
+
         async with ctx.typing():
-            try:
-                # Search for the song
-                from utils.helpers import validate_youtube_url
-                if validate_youtube_url(query):
-                    url = query
-                else:
-                    search_results = VideosSearch(query, limit=1).result()
-                    if not search_results or not search_results.get('result'):
-                        embed = create_error_embed("No results found for your search.")
-                        await ctx.send(embed=embed)
-                        return
-                    url = search_results['result'][0]['link']
-                
-                # Get song info
-                track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
-                
-                # Extract YouTube ID from URL
-                from utils.cache_manager import cache_manager
-                youtube_id = cache_manager.extract_youtube_id(track.url)
-                
-                # Add to playlist
-                success = await db.add_song_to_playlist(
-                    playlist_id, 
-                    track.title, 
-                    "YouTube", 
-                    track.url, 
-                    youtube_id
-                )
-                
-                if success:
-                    embed = create_success_embed(
-                        f"**{track.title}** has been added to **{playlist['name']}**"
+            from utils.helpers import validate_youtube_url
+            from utils.cache_manager import cache_manager
+
+            added = []
+            failed = []
+
+            for q in queries:
+                try:
+                    if validate_youtube_url(q):
+                        url = q
+                    else:
+                        search_results = VideosSearch(q, limit=1).result()
+                        if not search_results or not search_results.get('result'):
+                            failed.append(q)
+                            continue
+                        url = search_results['result'][0]['link']
+
+                    track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
+                    youtube_id = cache_manager.extract_youtube_id(track.url)
+
+                    success = await db.add_song_to_playlist(
+                        playlist_id,
+                        track.title,
+                        "YouTube",
+                        track.url,
+                        youtube_id
                     )
-                    embed.add_field(name="Playlist", value=playlist['name'], inline=True)
-                    embed.add_field(name="Song Count", value=playlist['song_count'] + 1, inline=True)
-                    await ctx.send(embed=embed)
-                else:
-                    embed = create_error_embed("Failed to add song to playlist.")
-                    await ctx.send(embed=embed)
-                    
-            except Exception as e:
-                logger.error(f"Error adding song to playlist: {e}")
-                embed = create_error_embed(f"Error adding song to playlist: {str(e)}")
+
+                    if success:
+                        added.append(track.title)
+                    else:
+                        failed.append(q)
+
+                except Exception as e:
+                    logger.error(f"Error adding song to playlist: {e}")
+                    failed.append(q)
+
+            if added:
+                desc = '\n'.join(f"• {t}" for t in added)
+                embed = create_success_embed(
+                    f"Added **{len(added)}** song(s) to **{playlist['name']}**"
+                )
+                embed.add_field(name="Added", value=desc, inline=False)
+                if failed:
+                    embed.add_field(name="Failed", value='\n'.join(f"• {q}" for q in failed), inline=False)
+                await ctx.send(embed=embed)
+            else:
+                embed = create_error_embed("Failed to add any songs to the playlist.")
                 await ctx.send(embed=embed)
     
     @commands.command(name='playlist_remove', help='Remove a song from a playlist')
@@ -148,34 +155,34 @@ class PlaylistCommands(commands.Cog):
             embed = create_error_embed("You are not connected to a voice channel.")
             await ctx.send(embed=embed)
             return
-        
+
         # Get playlist info
         playlist = await db.get_playlist(playlist_id)
         if not playlist:
             embed = create_error_embed("Playlist not found.")
             await ctx.send(embed=embed)
             return
-        
+
         # Check if playlist is public or user owns it
         user_id = str(ctx.author.id)
         if not playlist['is_public'] and playlist['user_id'] != user_id:
             embed = create_error_embed("This playlist is private.")
             await ctx.send(embed=embed)
             return
-        
+
         # Get playlist songs
         songs = await db.get_playlist_songs(playlist_id)
         if not songs:
             embed = create_error_embed("This playlist is empty.")
             await ctx.send(embed=embed)
             return
-        
+
         # Join voice channel if not connected
         voice_client = ctx.guild.voice_client
         if not voice_client or not voice_client.is_connected():
             await ctx.author.voice.channel.connect()
             voice_client = ctx.guild.voice_client
-        
+
         async with ctx.typing():
             try:
                 embed = create_info_embed(
@@ -183,10 +190,10 @@ class PlaylistCommands(commands.Cog):
                     f"Adding **{len(songs)}** songs from **{playlist['name']}** to the queue..."
                 )
                 await ctx.send(embed=embed)
-                
+
                 added_count = 0
                 first_track = None
-                
+
                 for i, song in enumerate(songs):
                     try:
                         # Use the stored URL if available, otherwise search
@@ -199,47 +206,47 @@ class PlaylistCommands(commands.Cog):
                             if not search_results or not search_results.get('result'):
                                 continue
                             url = search_results['result'][0]['link']
-                        
+
                         # Download track
                         track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
-                        
+
                         # Store the first track to play immediately if nothing is playing
                         if i == 0:
                             first_track = track
-                        
+
                         # Add to queue (skip first track if we'll play it immediately)
                         if i > 0 or voice_client.is_playing() or music_player.is_playing:
                             music_player.add_track(track)
-                        
+
                         added_count += 1
-                        
+
                     except Exception as e:
                         logger.error(f"Error adding song from playlist: {e}")
                         continue
-                
+
                 # Start playing the first track if nothing is currently playing
                 if first_track and not voice_client.is_playing() and not music_player.is_playing:
                     # Import the music commands to access _play_track method
                     from commands.music_commands import MusicCommands
                     music_cog = MusicCommands(self.bot)
                     await music_cog._play_track(ctx, first_track)
-                
+
                 embed = create_success_embed(
                     f"Added **{added_count}** songs from **{playlist['name']}** to the queue!"
                 )
                 embed.add_field(name="Playlist", value=playlist['name'], inline=True)
                 embed.add_field(name="Songs Added", value=added_count, inline=True)
                 embed.add_field(name="Total Songs", value=len(songs), inline=True)
-                
+
                 if added_count < len(songs):
                     embed.add_field(
-                        name="Note", 
+                        name="Note",
                         value=f"{len(songs) - added_count} songs could not be added due to errors.",
                         inline=False
                     )
-                
+
                 await ctx.send(embed=embed)
-                
+
             except Exception as e:
                 logger.error(f"Error playing playlist: {e}")
                 embed = create_error_embed(f"Error playing playlist: {str(e)}")
@@ -462,7 +469,7 @@ class PlaylistCommands(commands.Cog):
         
         embed.add_field(
             name="➕ Adding Songs",
-            value="`?playlist_add <playlist_id> <song_name_or_url>` - Add a song to your playlist",
+            value="`?playlist_add <playlist_id> <song_name_or_url>` - Add a song to your playlist (separate multiple with commas)",
             inline=False
         )
         
