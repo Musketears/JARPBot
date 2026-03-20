@@ -255,6 +255,14 @@ class MusicCommands(commands.Cog):
                 inline=False
             )
         
+        # Pending downloads
+        if queue_info['pending_count'] > 0:
+            embed.add_field(
+                name="⏳ Pending Download",
+                value=f"{queue_info['pending_count']} song(s) queued for download",
+                inline=False
+            )
+
         # Queue info
         embed.add_field(
             name="ℹ️ Info",
@@ -501,16 +509,16 @@ class MusicCommands(commands.Cog):
         """Play the next track in queue"""
         # Clean up current track files
         music_player.cleanup_current_track()
-        
+
         # Clean up any remaining files (only if they're not cached)
         if self.current_file and os.path.exists(self.current_file):
             # Check if this is a cached file
             cache_audio_dir = os.path.join("cache", "audio")
             cache_normalized_dir = os.path.join("cache", "normalized")
-            
-            is_cached = (self.current_file.startswith(cache_audio_dir) or 
+
+            is_cached = (self.current_file.startswith(cache_audio_dir) or
                         self.current_file.startswith(cache_normalized_dir))
-            
+
             if not is_cached:
                 try:
                     os.remove(self.current_file)
@@ -519,9 +527,20 @@ class MusicCommands(commands.Cog):
                     logger.error(f"Error cleaning up file {self.current_file}: {e}")
             else:
                 logger.debug(f"Skipped cleanup of cached file: {self.current_file}")
-        
+
+        # If queue is empty but pending downloads exist, wait for buffer to fill
+        if not music_player.queue and music_player._pending_urls:
+            logger.info("Queue empty — waiting for buffer fill...")
+            music_player.trigger_buffer_fill()
+            if music_player._buffer_task and not music_player._buffer_task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(music_player._buffer_task), timeout=60)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    logger.error("Buffer fill timed out or was cancelled waiting for next track")
+
         if music_player.queue:
             next_track = music_player.queue.pop(0)
+            music_player.trigger_buffer_fill()  # Refill buffer now that we consumed one slot
             await self._play_track(ctx, next_track)
         else:
             music_player.is_playing = False

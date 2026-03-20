@@ -48,6 +48,11 @@ class MusicPlayer:
         self.is_playing = False
         self.is_paused = False
         self.normalize_audio = True  # Enable audio normalization by default
+
+        # Lazy download buffer — URLs waiting to be downloaded
+        self._pending_urls: List[Dict] = []
+        self._buffer_task: Optional[asyncio.Task] = None
+        self._DOWNLOAD_AHEAD = 3  # Keep this many tracks downloaded and ready
         
         # Updated yt-dlp configuration for better compatibility
         ytdl_options = {
@@ -269,6 +274,56 @@ class MusicPlayer:
                 if youtube_id in _download_locks:
                     del _download_locks[youtube_id]
     
+    async def extract_info_only(self, url: str) -> Dict:
+        """Fetch track metadata without downloading the audio file."""
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: self.ytdl.extract_info(url, download=False))
+        if 'entries' in data:
+            data = data['entries'][0]
+        youtube_id = cache_manager.extract_youtube_id(url) or data.get('id')
+        return {
+            'title': data.get('title', 'Unknown Title'),
+            'duration': data.get('duration', 0),
+            'youtube_id': youtube_id,
+            'url': data.get('webpage_url', url),
+            'thumbnail': data.get('thumbnail'),
+        }
+
+    def add_pending(self, url: str, requester_id: int, requester_name: str):
+        """Add a URL to the pending download queue."""
+        self._pending_urls.append({
+            'url': url,
+            'requester_id': requester_id,
+            'requester_name': requester_name,
+        })
+
+    def clear_pending(self):
+        """Clear pending URLs and cancel any in-progress buffer fill."""
+        self._pending_urls.clear()
+        if self._buffer_task and not self._buffer_task.done():
+            self._buffer_task.cancel()
+            self._buffer_task = None
+
+    async def _fill_buffer(self):
+        """Background task: download pending URLs until queue has _DOWNLOAD_AHEAD ready tracks."""
+        while self._pending_urls and len(self.queue) < self._DOWNLOAD_AHEAD:
+            entry = self._pending_urls.pop(0)
+            try:
+                track = await self.download_track(
+                    entry['url'], entry['requester_id'], entry['requester_name']
+                )
+                self.add_track(track)
+                logger.info(
+                    f"Buffer: downloaded '{track.title}' — {len(self.queue)} ready, {len(self._pending_urls)} pending"
+                )
+            except Exception as e:
+                logger.error(f"Buffer download failed for {entry['url']}: {e}")
+
+    def trigger_buffer_fill(self):
+        """Start background buffer fill if not already running."""
+        if self._pending_urls and (self._buffer_task is None or self._buffer_task.done()):
+            self._buffer_task = asyncio.create_task(self._fill_buffer())
+
     def add_track(self, track: Track, position: Optional[int] = None):
         """Add track to queue"""
         if len(self.queue) >= config.max_queue_size:
@@ -290,11 +345,10 @@ class MusicPlayer:
         return None
     
     def clear_queue(self):
-        """Clear the queue and clean up files"""
-        # Clean up files for all tracks in queue
+        """Clear the queue, pending downloads, and clean up files"""
+        self.clear_pending()
         if self.queue:
             asyncio.create_task(self.cleanup_files(self.queue))
-        
         self.queue.clear()
         logger.info("Queue cleared and files cleaned up")
     
@@ -308,6 +362,7 @@ class MusicPlayer:
         return {
             'current_track': self.current_track.title if self.current_track else None,
             'queue_length': len(self.queue),
+            'pending_count': len(self._pending_urls),
             'is_playing': self.is_playing,
             'is_paused': self.is_paused,
             'volume': self.volume,

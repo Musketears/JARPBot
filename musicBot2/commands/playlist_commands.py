@@ -62,7 +62,6 @@ class PlaylistCommands(commands.Cog):
 
         async with ctx.typing():
             from utils.helpers import validate_youtube_url
-            from utils.cache_manager import cache_manager
 
             added = []
             failed = []
@@ -78,19 +77,19 @@ class PlaylistCommands(commands.Cog):
                             continue
                         url = search_results['result'][0]['link']
 
-                    track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
-                    youtube_id = cache_manager.extract_youtube_id(track.url)
+                    # Fetch metadata only — no audio download needed
+                    info = await music_player.extract_info_only(url)
 
                     success = await db.add_song_to_playlist(
                         playlist_id,
-                        track.title,
+                        info['title'],
                         "YouTube",
-                        track.url,
-                        youtube_id
+                        info['url'],
+                        info['youtube_id']
                     )
 
                     if success:
-                        added.append(track.title)
+                        added.append(info['title'])
                     else:
                         failed.append(q)
 
@@ -185,65 +184,74 @@ class PlaylistCommands(commands.Cog):
 
         async with ctx.typing():
             try:
+                currently_playing = voice_client.is_playing() or music_player.is_playing
+
                 embed = create_info_embed(
                     "Adding Playlist to Queue",
-                    f"Adding **{len(songs)}** songs from **{playlist['name']}** to the queue..."
+                    f"Loading **{playlist['name']}** ({len(songs)} songs) — first few will download now, rest queue in background..."
                 )
                 await ctx.send(embed=embed)
 
-                added_count = 0
+                # Resolve all URLs first (search only for songs without a stored URL)
+                resolved_urls = []
+                for song in songs:
+                    if song['song_url']:
+                        resolved_urls.append(song['song_url'])
+                    else:
+                        search_query = f"{song['song_title']} {song['song_artist']}"
+                        search_results = VideosSearch(search_query, limit=1).result()
+                        if search_results and search_results.get('result'):
+                            resolved_urls.append(search_results['result'][0]['link'])
+                        # Skip songs we can't resolve
+
+                if not resolved_urls:
+                    embed = create_error_embed("Could not resolve any songs in this playlist.")
+                    await ctx.send(embed=embed)
+                    return
+
+                # Determine how many to download eagerly
+                # We need: 1 for immediate play (if nothing playing) + up to DOWNLOAD_AHEAD in buffer
+                buffer_slots = music_player._DOWNLOAD_AHEAD - len(music_player.queue)
+                if not currently_playing:
+                    buffer_slots += 1  # One extra for the track we'll play immediately
+                eager_count = max(0, min(buffer_slots, len(resolved_urls)))
+
                 first_track = None
+                added_count = 0
 
-                for i, song in enumerate(songs):
+                # Download the eager batch
+                for i, url in enumerate(resolved_urls[:eager_count]):
                     try:
-                        # Use the stored URL if available, otherwise search
-                        if song['song_url']:
-                            url = song['song_url']
-                        else:
-                            # Search for the song
-                            search_query = f"{song['song_title']} {song['song_artist']}"
-                            search_results = VideosSearch(search_query, limit=1).result()
-                            if not search_results or not search_results.get('result'):
-                                continue
-                            url = search_results['result'][0]['link']
-
-                        # Download track
                         track = await music_player.download_track(url, ctx.author.id, ctx.author.name)
-
-                        # Store the first track to play immediately if nothing is playing
-                        if i == 0:
-                            first_track = track
-
-                        # Add to queue (skip first track if we'll play it immediately)
-                        if i > 0 or voice_client.is_playing() or music_player.is_playing:
+                        if i == 0 and not currently_playing:
+                            first_track = track  # Play this one immediately
+                        else:
                             music_player.add_track(track)
-
                         added_count += 1
-
                     except Exception as e:
-                        logger.error(f"Error adding song from playlist: {e}")
-                        continue
+                        logger.error(f"Error downloading playlist track {i}: {e}")
 
-                # Start playing the first track if nothing is currently playing
-                if first_track and not voice_client.is_playing() and not music_player.is_playing:
-                    # Import the music commands to access _play_track method
-                    from commands.music_commands import MusicCommands
-                    music_cog = MusicCommands(self.bot)
+                # Add remaining URLs to pending queue for lazy download
+                for url in resolved_urls[eager_count:]:
+                    music_player.add_pending(url, ctx.author.id, ctx.author.name)
+                    added_count += 1
+
+                # Kick off background buffer fill for pending songs
+                music_player.trigger_buffer_fill()
+
+                # Start playback or add first track to queue
+                music_cog = self.bot.get_cog('MusicCommands')
+                if first_track and not currently_playing and music_cog:
                     await music_cog._play_track(ctx, first_track)
+                elif first_track:
+                    music_player.add_track(first_track)
 
                 embed = create_success_embed(
-                    f"Added **{added_count}** songs from **{playlist['name']}** to the queue!"
+                    f"Queued **{playlist['name']}** — {eager_count} song(s) ready, "
+                    f"{len(resolved_urls[eager_count:])} downloading in background"
                 )
                 embed.add_field(name="Playlist", value=playlist['name'], inline=True)
-                embed.add_field(name="Songs Added", value=added_count, inline=True)
-                embed.add_field(name="Total Songs", value=len(songs), inline=True)
-
-                if added_count < len(songs):
-                    embed.add_field(
-                        name="Note",
-                        value=f"{len(songs) - added_count} songs could not be added due to errors.",
-                        inline=False
-                    )
+                embed.add_field(name="Total Songs", value=len(resolved_urls), inline=True)
 
                 await ctx.send(embed=embed)
 
