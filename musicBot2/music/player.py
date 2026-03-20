@@ -353,8 +353,9 @@ class MusicPlayer:
         logger.info("Queue cleared and files cleaned up")
     
     def shuffle_queue(self):
-        """Shuffle the queue"""
+        """Shuffle the ready queue and pending URLs together"""
         random.shuffle(self.queue)
+        random.shuffle(self._pending_urls)
         logger.info("Queue shuffled")
     
     def get_queue_info(self) -> Dict[str, Any]:

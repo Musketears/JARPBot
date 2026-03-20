@@ -96,9 +96,14 @@ class MusicCommands(commands.Cog):
         # Join voice channel if not connected
         voice_client = ctx.guild.voice_client
         if not voice_client or not voice_client.is_connected():
-            await ctx.author.voice.channel.connect()
+            try:
+                await ctx.author.voice.channel.connect()
+            except asyncio.TimeoutError:
+                embed = create_error_embed("Timed out connecting to the voice channel. Discord's voice servers may be slow — please try again.")
+                await ctx.send(embed=embed)
+                return
             voice_client = ctx.guild.voice_client
-        
+
         async with ctx.typing():
             async with _global_processing_lock:
                 try:
@@ -277,7 +282,8 @@ class MusicCommands(commands.Cog):
     @log_command
     async def shuffle(self, ctx):
         """Shuffle the music queue"""
-        if len(music_player.queue) < 2:
+        total = len(music_player.queue) + len(music_player._pending_urls)
+        if total < 2:
             embed = create_error_embed("Need at least 2 tracks to shuffle.")
             await ctx.send(embed=embed)
             return
