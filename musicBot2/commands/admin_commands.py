@@ -118,7 +118,7 @@ class AdminCommands(commands.Cog):
             capture_output=True, text=True)
             embed.description = "result.stdout"
             time.sleep(30)
-            subprocess.run(['sudo', 'tailscale', 'up])
+            subprocess.run(['sudo', 'tailscale', 'up'])
         except Exception as e:
             logger.error(f"Error during bot update: {e}")
             embed = discord.Embed(
